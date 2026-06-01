@@ -58,6 +58,31 @@ Function OnEntityRemove(int entityID)
 	players.Remove(index)
 EndFunction
 
+; A2 (cleanup half): raised from C++ (F4MP::OnDisonnect) when the link drops.
+; Delete every cloned remote-player actor and cancel the network timers so we
+; don't leave frozen ghosts behind or keep ticking a dead connection. The
+; `reason` arg is reserved for future use (e.g. distinguishing error vs. quit).
+Function OnDisconnect(int reason)
+	If players != None
+		int i = 0
+		While i < players.length
+			If players[i] != None
+				players[i].Delete()
+			EndIf
+			i += 1
+		EndWhile
+	EndIf
+
+	playerIDs = new int[0]
+	players = new F4MPPlayer[0]
+
+	CancelTimer(tickTimerID)
+	CancelTimer(updateTimerID)
+	CancelTimer(npcSyncTimerID)
+
+	Debug.Notification("F4MP: disconnected.")
+EndFunction
+
 Function OnPlayerHit(float damage)
 	Game.GetPlayer().DamageValue(healthAV, damage)
 EndFunction
@@ -166,6 +191,7 @@ Event OnKeyDown(int keyCode)
 
 		RegisterForExternalEvent("OnPlayerHit", "OnPlayerHit")
 		RegisterForExternalEvent("OnNPCHit", "OnNPCHit")
+		RegisterForExternalEvent("OnDisconnect", "OnDisconnect")
 
 		RegisterForKey(113)
 		RegisterForKey(114)

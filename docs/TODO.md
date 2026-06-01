@@ -88,15 +88,26 @@ shared **health/death**, mirroring the proven `Player` health pattern.
   `GetValuePercentage(healthAV)` into its entity via the existing `SetEntVarNum` native. Only the
   owner actually streams it out; on non-owners it's a harmless local write.
 
+**Done (2026-06-01, untested at runtime):** **cross-client damage routing.** A non-owner's hits
+on a shared enemy now travel to the owner, who applies them to the authoritative actor; the
+resulting health streams back via the NPC health sync.
+- `f4mp/NPC.{h,cpp}`: `mine` flag (set in `OnClientUpdate`, since librg only streams that to the
+  controller) + `IsMine()`. `f4mp.cpp`: `IsEntityMine` native; `OnHit` extended so an NPC hittee
+  fires the `OnNPCHit` external event on the owner instead of the player-only path.
+- `F4MPQuest.psc`: `RegisterForHitEvent` on each shared enemy in the sync loop; `Event OnHit`
+  routes the local player's damage via `PlayerHit` **only when `!IsEntityMine`** (the owner's own
+  hits already count locally — routing them would double the damage); `Function OnNPCHit` applies
+  `DamageValue(healthAV, damage)` on the owner. Server needs no change: its `OnHit` already routes
+  `HitData` to `librg_entity_control_get(hittee)` = the owner.
+
 **Still TODO for full Level 1:**
-- **Cross-client damage routing.** Today an enemy only loses health on the machine whose player
-  hits it; that owner then streams the result. If a *non-owner* shoots a shared enemy, the hit
-  must travel to the owner to register. The `Hit`/`HitData` channel + server `OnHit`
-  (routes to `librg_entity_control_get(hittee)`) is the right pipe — extend it so an NPC hittee
-  applies `DamageValue` on the owner's real actor (mirror `F4MPPlayer.OnHit` for shared NPCs).
 - Throttle the cell scan in `SyncSharedNPCHealth` (currently re-arms at 0s like the other timers
   — fold into the A3 tick-cadence fix).
-- Optionally stop the receiver's local AI from re-deriving its own health (prevent revive jitter).
+- A non-owner's *local* enemy copy still takes real weapon damage before the owner's value
+  overwrites it, so HP can briefly diverge on the shooter's screen (converges on death). Cleanest
+  fix is making non-owner copies damage-immune puppets (drifts toward Level 2 authority model).
+- Routed damage uses `InstanceData.GetAttackDamage` (base weapon damage), not the fully-resolved
+  hit (armor/resistances/perks). Good enough for L1; revisit if balance matters.
 
 ### 🟠 B2. Building / settlement sync is half-wired
 `SyncWorld` (`f4mp.cpp:1072`) scans the player's cell for static objects (formType 36) and

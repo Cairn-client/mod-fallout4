@@ -11,6 +11,7 @@
     } while (0)
 
 #include "f4mp.h"
+#include "NPC.h"
 #include "TopicInfoIDs.h"
 #include "f4se/NiNodes.h"
 #include "f4se/PapyrusDelayFunctors.h"
@@ -122,6 +123,7 @@ bool f4mp::F4MP::Init(const F4SEInterface* f4se)
 			vm->RegisterFunction(new NativeFunction2<StaticFunctionTag, void, UInt32, TESObjectREFR*>("SetEntityRef", "F4MP", SetEntityRef, vm));
 
 			vm->RegisterFunction(new NativeFunction1<StaticFunctionTag, bool, UInt32>("IsEntityValid", "F4MP", IsEntityValid, vm));
+				vm->RegisterFunction(new NativeFunction1<StaticFunctionTag, bool, UInt32>("IsEntityMine", "F4MP", IsEntityMine, vm));
 
 			vm->RegisterFunction(new NativeFunction1<StaticFunctionTag, VMArray<Float32>, UInt32>("GetEntityPosition", "F4MP", GetEntityPosition, vm));
 			vm->RegisterFunction(new NativeFunction4<StaticFunctionTag, void, UInt32, Float32, Float32, Float32>("SetEntityPosition", "F4MP", SetEntityPosition, vm));
@@ -263,6 +265,7 @@ bool f4mp::F4MP::Init(const F4SEInterface* f4se)
 			vm->SetFunctionFlags("F4MP", "GetEntityID", IFunction::kFunctionFlag_NoWait);
 			vm->SetFunctionFlags("F4MP", "SetEntityRef", IFunction::kFunctionFlag_NoWait);
 			vm->SetFunctionFlags("F4MP", "IsEntityValid", IFunction::kFunctionFlag_NoWait);
+			vm->SetFunctionFlags("F4MP", "IsEntityMine", IFunction::kFunctionFlag_NoWait);
 			vm->SetFunctionFlags("F4MP", "GetEntityPosition", IFunction::kFunctionFlag_NoWait);
 			vm->SetFunctionFlags("F4MP", "SetEntityPosition", IFunction::kFunctionFlag_NoWait);
 			vm->SetFunctionFlags("F4MP", "SetEntVarNum", IFunction::kFunctionFlag_NoWait);
@@ -711,6 +714,30 @@ void f4mp::F4MP::OnHit(librg_message* msg)
 	_MESSAGE("OnHit: %u -> %u", data.hitter, data.hittee);
 
 	F4MP& self = GetInstance();
+
+	// The server only routes a Hit to the entity's controller, so if the hittee
+	// is one of our shared NPCs we are its owner: apply the networked damage to
+	// the real (authoritative) enemy actor. The resulting health then streams
+	// back out to everyone via the NPC health sync. Damage application stays in
+	// Papyrus (OnNPCHit -> DamageValue), matching how the rest of the mod works.
+	NPC* npc = Entity::GetAs<NPC>(self.FetchEntity(data.hittee));
+	if (npc)
+	{
+		TESObjectREFR* ref = npc->GetRef();
+		if (ref)
+		{
+			struct NPCHit { UInt32 formID; Float32 damage; } hit{ ref->formID, data.damage };
+
+			self.papyrus->GetExternalEventRegistrations("OnNPCHit", &hit, [](UInt64 handle, const char* scriptName, const char* callbackName, void* dataPtr)
+				{
+					NPCHit* hit = static_cast<NPCHit*>(dataPtr);
+					SendPapyrusEvent2<UInt32, Float32>(handle, scriptName, callbackName, hit->formID, hit->damage);
+				});
+		}
+
+		return;
+	}
+
 	self.papyrus->GetExternalEventRegistrations("OnPlayerHit", &data, [](UInt64 handle, const char* scriptName, const char* callbackName, void* dataPtr)
 		{
 			F4MP& self = GetInstance();
@@ -1255,6 +1282,23 @@ bool f4mp::F4MP::IsEntityValid(StaticFunctionTag* base, UInt32 entityID)
 {
 	F4MP& self = GetInstance();
 	return !!librg_entity_valid(&self.ctx, entityID);
+}
+
+bool f4mp::F4MP::IsEntityMine(StaticFunctionTag* base, UInt32 entityID)
+{
+	F4MP& self = GetInstance();
+
+	// Our own player is always "ours".
+	if (entityID == self.player->GetEntityID())
+	{
+		return true;
+	}
+
+	// For shared NPCs, ownership = whoever librg lets stream the entity (set in
+	// NPC::OnClientUpdate). Non-owners route their hits; the owner applies its
+	// own hits locally, so it must not also route them (avoids double damage).
+	NPC* npc = Entity::GetAs<NPC>(self.FetchEntity(entityID));
+	return npc && npc->IsMine();
 }
 
 VMArray<Float32> f4mp::F4MP::GetEntityPosition(StaticFunctionTag* base, UInt32 entityID)

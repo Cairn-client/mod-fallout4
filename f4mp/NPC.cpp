@@ -1,7 +1,7 @@
 #include "NPC.h"
 #include "f4mp.h"
 
-f4mp::NPC::NPC() : formID(0), ownerEntityID((UInt32)-1), killed(false)
+f4mp::NPC::NPC() : formID(0), ownerEntityID((UInt32)-1), killed(false), mine(false)
 {
 	// Health is streamed as a [0, 1] fraction, just like Player. Until the
 	// authority feeds a real value (F4MPQuest health poll) it stays "full".
@@ -64,7 +64,15 @@ void f4mp::NPC::OnClientUpdate(librg_event* event)
 	Character::OnClientUpdate(event);
 
 	// Only the controlling (authority) client gets OnClientUpdate for this NPC,
-	// so this is where the enemy's authoritative health leaves the machine. The
-	// value is fed in by F4MPQuest's health poll via SetEntVarNum.
+	// so reaching here proves we own it, and this is where the enemy's
+	// authoritative health leaves the machine. The value is fed in by
+	// F4MPQuest's health poll via SetEntVarNum.
+	mine = true;
+
 	librg_data_wf32(event->data, GetNumber("health"));
+}
+
+bool f4mp::NPC::IsMine() const
+{
+	return mine;
 }

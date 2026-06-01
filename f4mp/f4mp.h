@@ -131,6 +131,7 @@ namespace f4mp
 		static void SetEntityRef(StaticFunctionTag* base, UInt32 entityID, TESObjectREFR* ref);
 
 		static bool IsEntityValid(StaticFunctionTag* base, UInt32 entityID);
+		static bool IsEntityMine(StaticFunctionTag* base, UInt32 entityID);
 
 		static VMArray<Float32> GetEntityPosition(StaticFunctionTag* base, UInt32 entityID);
 		static void SetEntityPosition(StaticFunctionTag* base, UInt32 entityID, float x, float y, float z);

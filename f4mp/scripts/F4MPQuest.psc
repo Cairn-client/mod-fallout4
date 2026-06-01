@@ -159,6 +159,7 @@ Event OnKeyDown(int keyCode)
 		RegisterForExternalEvent("OnEntityRemove", "OnEntityRemove")
 
 		RegisterForExternalEvent("OnPlayerHit", "OnPlayerHit")
+		RegisterForExternalEvent("OnNPCHit", "OnNPCHit")
 
 		RegisterForKey(113)
 		RegisterForKey(114)
@@ -240,8 +241,44 @@ Function SyncSharedNPCHealth()
 			int entityID = F4MP.GetEntityID(refs[i])
 			If F4MP.IsEntityValid(entityID)
 				F4MP.SetEntVarNum(entityID, "health", enemy.GetValuePercentage(healthAV))
+
+				; Listen for hits on this shared enemy so we can route our local
+				; player's damage to whoever owns it (filtered in Event OnHit).
+				RegisterForHitEvent(enemy)
 			EndIf
 		EndIf
 		i += 1
 	EndWhile
+EndFunction
+
+; Fires when an actor we registered (a shared enemy) is hit by the local player.
+; If we don't own that enemy, send the damage to its owner; the owner applies it
+; to the authoritative actor and the resulting health streams back to everyone.
+; (If we DO own it, our local hit already counts -- routing would double it.)
+Event OnHit(ObjectReference akTarget, ObjectReference akAggressor, Form akSource, Projectile akProjectile, bool abPowerAttack, bool abSneakAttack, bool abBashAttack, bool abHitBlocked, string apMaterial)
+	If akAggressor != playerRef
+		return
+	EndIf
+
+	int entityID = F4MP.GetEntityID(akTarget)
+	If !F4MP.IsEntityValid(entityID) || F4MP.IsEntityMine(entityID)
+		return
+	EndIf
+
+	Weapon sourceWeapon = akSource as Weapon
+	If sourceWeapon
+		InstanceData:Owner owner = sourceWeapon.GetInstanceOwner()
+		float damage = InstanceData.GetAttackDamage(owner)
+		F4MP.PlayerHit(F4MP.GetPlayerEntityID(), entityID, damage)
+	EndIf
+EndEvent
+
+; Owner-side: apply networked damage from a remote player's hit to the real
+; shared enemy. DamageValue on Health to 0 kills it; the death then propagates
+; through the NPC health sync.
+Function OnNPCHit(int formID, float damage)
+	Actor enemy = Game.GetForm(formID) as Actor
+	If enemy != None
+		enemy.DamageValue(healthAV, damage)
+	EndIf
 EndFunction

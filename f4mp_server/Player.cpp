@@ -35,8 +35,18 @@ void f4mp::Player::OnConnectRefuse(librg_event* event)
 {
     Character::OnConnectRefuse(event);
 
+    // A5: null the references before freeing (see Entity::OnDisonnect). On a
+    // refused connect this Player is reachable via event->user_data and the
+    // peer's data; clear both so nothing dereferences a freed object.
+    if (event->user_data == this)
+    {
+        event->user_data = nullptr;
+    }
+    if (event->peer && event->peer->data == this)
+    {
+        event->peer->data = nullptr;
+    }
     delete this;
-    event->user_data = nullptr;
 }
 
 void f4mp::Player::OnEntityCreate(librg_event* event)

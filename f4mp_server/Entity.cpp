@@ -69,8 +69,20 @@ void f4mp::Entity::OnConnectRefuse(librg_event* event)
 
 void f4mp::Entity::OnDisonnect(librg_event* event)
 {
+	// A5: null EVERY pointer to this object BEFORE freeing it. A Player is
+	// referenced from both entity->user_data and peer->data; the old code freed
+	// first and nulled only entity->user_data, leaving peer->data dangling -> a
+	// use-after-free (server crash = everyone drops) if any later handler or a
+	// duplicate disconnect event touched the peer in the same tick.
+	if (event->entity)
+	{
+		event->entity->user_data = nullptr;
+	}
+	if (event->peer)
+	{
+		event->peer->data = nullptr;
+	}
 	delete this;
-	event->entity->user_data = nullptr;
 }
 
 void f4mp::Entity::OnEntityCreate(librg_event* event)

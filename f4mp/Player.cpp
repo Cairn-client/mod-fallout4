@@ -127,8 +127,10 @@ void f4mp::Player::OnTick()
 
 SInt32 f4mp::Player::GetInteger(const std::string& name) const
 {
-	// HACK: horrible
-	return integers.find(name)->second;
+	// Guard the lookup: dereferencing end() on a missing key was a crash
+	// (author's "HACK: horrible"). Default unknown integers to 0.
+	auto it = integers.find(name);
+	return it != integers.end() ? it->second : 0;
 }
 
 void f4mp::Player::SetInteger(const std::string& name, SInt32 integer)

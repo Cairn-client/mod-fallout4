@@ -150,8 +150,10 @@ void f4mp::Entity::SetRef(TESObjectREFR* ref)
 
 Float32 f4mp::Entity::GetNumber(const std::string& name) const
 {
-	// HACK: horrible
-	return numbers.find(name)->second;
+	// Guard the lookup: the old code dereferenced end() for an unknown key,
+	// which is a crash (author's "HACK: horrible"). Default unknowns to 0.
+	auto it = numbers.find(name);
+	return it != numbers.end() ? it->second : 0.f;
 }
 
 void f4mp::Entity::SetNumber(const std::string& name, Float32 number)

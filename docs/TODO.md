@@ -33,9 +33,27 @@ spawned remote-player actors are **not** cleaned up on the local side.
 (`f4mp.cpp:1013`) is what calls `librg_tick`. The Papyrus VM is **paused** during loading
 screens, the pause menu, and dialogue, so `librg_tick` stops → no packets in/out → the link
 goes half-open. Today this "works" only because A1 disabled the server timeout.
-- **Fix:** decouple network ticking from the Papyrus VM. Options: run `librg_tick` on an F4SE
-  task/own thread, or at minimum send an application-level heartbeat so both ends know the peer
-  is alive across VM pauses. This is the linchpin that makes A1 safe to fix.
+- **Fix:** decouple network ticking from the Papyrus VM. This is the linchpin that makes A1 safe.
+
+**Concrete implementation plan (ready to build; needs 2-client runtime validation — do NOT land blind):**
+There is already an F4SE delay functor (`f4mp.cpp` ~`301`, registered on `PostLoadGame`) that
+reschedules every ~1ms on the **main thread** and runs across Papyrus VM pauses (it drives
+animation via `librg_entity_iterate(... OnTick())`). Use it as the single network driver:
+1. **Single-thread the ctx.** Move `librg_tick(&instance->ctx)` from the Papyrus `F4MP::Tick`
+   into that functor. Make the Papyrus tick timer stop calling the network path. This avoids a
+   data race (today the Papyrus VM thread and the main-thread functor would both touch `ctx`).
+2. **Move `SyncWorld` to the functor too**, throttled to ~every 100ms (not 1ms — it's a full
+   cell scan + message sends). Running it on the main thread is also *safer* for game-object
+   access than the current Papyrus-thread call.
+3. **Keep one owner of `ctx`.** After this, only the functor calls `librg_tick` / `SyncWorld` /
+   `librg_message_send_*`; Papyrus natives that send (`PlayerHit`, `PlayerFireWeapon`) should
+   enqueue into a small thread-safe queue the functor flushes, OR be guarded by a single
+   `std::mutex` around all `ctx` access. Prefer the single-owner queue (no lock-sprawl).
+4. **Watch the split-client machinery** (`activeInstance`/`instances[]`, C3): the
+   `nextActiveInstance` bookkeeping currently lives in `F4MP::Tick`; it must move with the tick.
+- **Why not landed yet:** this changes the network threading model; a wrong move crashes on
+  connect, and it can't be validated without FO4 1.10.163 + two clients. Implement + test
+  together once a runtime exists; then A1 (re-enable server timeout) becomes safe.
 
 ### ✅ A4. `Connect()` starts timers before knowing if the connection succeeded — DONE (2026-06-01)
 `F4MPQuest.Connect` now captures `F4MP.Connect`'s result and only `StartTimer`s the

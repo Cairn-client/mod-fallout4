@@ -55,3 +55,8 @@ f4mp/scripts/.vscode/settings.json
 f4mp/scripts/copy.bat
 
 f4mp_server/scripts/bin
+
+# Steamworks SDK — vendored locally per machine, NOT committed (license/redistribution).
+# See thirdparty/steamworks/README.md for what to drop here.
+thirdparty/steamworks/*
+!thirdparty/steamworks/README.md

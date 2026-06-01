@@ -123,12 +123,18 @@ EndFunction
 bool Function Connect(string address, int port)
 	Actor client = Game.GetPlayer()
 	ActorBase clientActorBase = client.GetActorBase()
-	
-	StartTimer(0, tickTimerID)
-	StartTimer(0, updateTimerID)
-	StartTimer(0, npcSyncTimerID)
 
-	return F4MP.Connect(client, clientActorBase, address, port)
+	; A4: only start the tick/update/npc-sync timers once we know the connection
+	; actually succeeded. The old code armed them before calling F4MP.Connect and
+	; ignored the result, so a failed connect left timers ticking a dead context.
+	bool connected = F4MP.Connect(client, clientActorBase, address, port)
+	If connected
+		StartTimer(0, tickTimerID)
+		StartTimer(0, updateTimerID)
+		StartTimer(0, npcSyncTimerID)
+	EndIf
+
+	return connected
 EndFunction
 
 Sound Property mySound Auto

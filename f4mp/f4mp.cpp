@@ -85,6 +85,14 @@ f4mp::F4MP::F4MP() : ctx{}, port(0), handle(kPluginHandle_Invalid), messaging(nu
 	}
 
 	configFile >> config.hostAddress;
+
+	// Don't trust the file blindly: an empty/garbage config.txt would leave the
+	// host address blank and the connect would fail with no clear reason. Fall
+	// back to localhost so a malformed file degrades gracefully.
+	if (config.hostAddress.empty())
+	{
+		config.hostAddress = "localhost";
+	}
 }
 
 f4mp::F4MP::~F4MP()
@@ -144,7 +152,10 @@ bool f4mp::F4MP::Init(const F4SEInterface* f4se)
 					auto& actions = (*g_dataHandler)->arrAACT;
 					for (UInt32 i = 0; i < actions.count; i++)
 					{
-						if (std::string(actions[i]->GetFullName()).compare(name.c_str()))
+						// std::string::compare returns 0 on a match; the old condition
+						// was truthy when names DIFFER, so it returned the first
+						// non-matching action. Compare against 0 for a real match.
+						if (std::string(actions[i]->GetFullName()).compare(name.c_str()) == 0)
 						{
 							return actions[i];
 						}

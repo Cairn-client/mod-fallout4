@@ -20,13 +20,14 @@ forever. Every other client keeps seeing a frozen ghost, and entity slots leak o
 - **Why it was set:** almost certainly to stop disconnects during long Papyrus stalls (loading
   screens) — see A3. Fixing A3 (app-level keepalive) lets us safely re-enable the timeout.
 
-### 🔴 A2. Client has no reconnect / disconnect recovery
-`f4mp/f4mp.cpp:625` `OnConnectRefuse` only logs `_ERROR`; `f4mp.cpp:631` `OnDisonnect` just
-forwards to `player`. There is no retry, no backoff, no user-facing notification, and the
-spawned remote-player actors are **not** cleaned up on the local side.
-- **Fix:** on disconnect → fire a Papyrus event so `F4MPQuest` can notify the player and delete
-  all cloned actors (it already tracks them in `players[]`/`playerIDs[]`). Add an optional
-  auto-reconnect with capped exponential backoff. Re-send appearance/worn-items on reconnect.
+### 🟠 A2. Client disconnect recovery — cleanup half DONE (2026-06-01); reconnect half remaining
+- ✅ **Cleanup (done):** `F4MP::OnDisonnect` now raises an `OnDisconnect` external event;
+  `F4MPQuest.OnDisconnect` deletes all cloned remote-player actors and cancels the network
+  timers, plus a user-facing notification. No more lingering ghost clones / timers on a dead
+  context. Compiles (C++ + Papyrus). Not runtime-tested.
+- ⏳ **Reconnect (remaining, needs runtime):** auto-reconnect with capped exponential backoff,
+  and re-send appearance/worn-items on reconnect (`OnConnectRefuse` still only logs). Pairs with
+  A3/A1 and needs a 1.10.163 runtime to validate (timing, re-handshake, no duplicate clones).
 
 ### 🔴 A3. Client tick is driven by a Papyrus 0-second timer → starves during loading/menus
 `F4MPQuest.psc:196` `OnTimer` → `F4MP.Tick()` → re-`StartTimer(0, tickTimerID)`. `F4MP::Tick`

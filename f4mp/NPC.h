@@ -16,5 +16,9 @@ namespace f4mp
 
 	private:
 		UInt32 formID, ownerEntityID;
+
+		// Set once when this client mirrors the authority's lethal health, so we
+		// only issue the kill a single time even though updates keep arriving.
+		bool killed;
 	};
 }

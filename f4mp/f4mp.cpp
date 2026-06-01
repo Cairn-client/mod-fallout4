@@ -1311,13 +1311,15 @@ void f4mp::F4MP::SetEntVarNum(StaticFunctionTag* base, UInt32 entityID, BSFixedS
 {
 	F4MP& self = GetInstance();
 
-	Player* player = Entity::GetAs<Player>(self.FetchEntity(entityID));
-	if (!player)
+	// Numbers live on Entity, not just Player, so this works for shared NPCs
+	// too (e.g. the authority feeding an enemy's "health" fraction).
+	Entity* entity = Entity::Get(self.FetchEntity(entityID));
+	if (!entity)
 	{
 		return;
 	}
 
-	player->SetNumber(name.c_str(), value);
+	entity->SetNumber(name.c_str(), value);
 }
 
 void f4mp::F4MP::SetEntVarAnim(StaticFunctionTag* base, UInt32 entityID, BSFixedString animState)
@@ -1337,13 +1339,14 @@ Float32 f4mp::F4MP::GetEntVarNum(StaticFunctionTag* base, UInt32 entityID, BSFix
 {
 	F4MP& self = GetInstance();
 
-	Player* player = Entity::GetAs<Player>(self.FetchEntity(entityID));
-	if (!player)
+	// See SetEntVarNum: Numbers are an Entity-level concept, shared NPCs included.
+	Entity* entity = Entity::Get(self.FetchEntity(entityID));
+	if (!entity)
 	{
 		return 0.f;
 	}
 
-	return player->GetNumber(name.c_str());
+	return entity->GetNumber(name.c_str());
 }
 
 BSFixedString f4mp::F4MP::GetEntVarAnim(StaticFunctionTag* base, UInt32 entityID)

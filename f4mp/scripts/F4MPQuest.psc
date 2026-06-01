@@ -2,6 +2,7 @@ Scriptname F4MPQuest extends Quest
 
 int tickTimerID = 10
 int updateTimerID = 20
+int npcSyncTimerID = 30
 
 Actor Property playerRef Auto
 
@@ -125,6 +126,7 @@ bool Function Connect(string address, int port)
 	
 	StartTimer(0, tickTimerID)
 	StartTimer(0, updateTimerID)
+	StartTimer(0, npcSyncTimerID)
 
 	return F4MP.Connect(client, clientActorBase, address, port)
 EndFunction
@@ -210,5 +212,36 @@ Event OnTimer(int aiTimerID)
 			F4MP.SetEntVarNum(playerEntityID, "health", playerRef.GetValuePercentage(healthAV))
 		EndIf
 		StartTimer(0, updateTimerID)
+	ElseIf aiTimerID == npcSyncTimerID
+		; Feed every shared enemy's current health fraction into its F4MP entity.
+		; Only the client that owns (controls) a given NPC actually streams this
+		; value out; on everyone else SetEntVarNum is a harmless local write, and
+		; the receiving side kills its copy once the owner's value reaches 0.
+		SyncSharedNPCHealth()
+		StartTimer(0, npcSyncTimerID)
 	EndIf
 EndEvent
+
+Function SyncSharedNPCHealth()
+	If !F4MP.IsConnected()
+		return
+	EndIf
+
+	Cell currentCell = playerRef.GetParentCell()
+	If currentCell == None
+		return
+	EndIf
+
+	ObjectReference[] refs = F4MP.GetRefsInCell(currentCell)
+	int i = 0
+	While i < refs.length
+		Actor enemy = refs[i] as Actor
+		If enemy != None && enemy != playerRef
+			int entityID = F4MP.GetEntityID(refs[i])
+			If F4MP.IsEntityValid(entityID)
+				F4MP.SetEntVarNum(entityID, "health", enemy.GetValuePercentage(healthAV))
+			EndIf
+		EndIf
+		i += 1
+	EndWhile
+EndFunction

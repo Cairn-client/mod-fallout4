@@ -67,12 +67,36 @@ clients or save state on exit. Also no periodic "N players connected" status lin
 
 ## B. Incomplete / stubbed features
 
-### 🟠 B1. NPC sync is essentially a stub
-Server `NPC.cpp` is 13 lines (just serializes formID + owner on create); there is **no**
-NPC position/state update path, and the client-side `OnSpawnEntity` Papyrus handler is
-commented out (`F4MPQuest.psc:100-110`). `OnSpawnEntity` server handler (`Server.h:161`)
-creates the entity but the `librg_message_send_all` broadcast is commented out (`Server.h:189`).
-NPCs (companions, enemies) are not meaningfully shared yet.
+### 🟠 B1. NPC sync — shared enemy health/death now wired (Level 1 in progress)
+Server `NPC.cpp` is 13 lines (just serializes formID + owner on create). Spawn + position +
+skeleton pose for NPCs already flow through the shared `Character`/`Entity` base path
+(`SyncWorld` → server `OnSpawnEntity` → librg entity-create → client `NPC::OnEntityCreate`
+→ `SetRef`), so the same placed enemies appear and move on both clients (relies on identical
+load orders for matching formIDs). The `librg_message_send_all` broadcast in the server
+`OnSpawnEntity` (`Server.h:189`) stays commented out on purpose — librg already streams
+entity-create to all clients.
+
+**Done (2026-06-01, untested at runtime — needs DLL rebuild + Papyrus recompile + 2 clients):**
+shared **health/death**, mirroring the proven `Player` health pattern.
+- `f4mp/NPC.{h,cpp}`: the controlling (authority) client streams the enemy's `health` fraction
+  in `OnClientUpdate`; receivers read it in `OnEntityUpdate`, store it, and `Kill` their local
+  copy once it reaches 0 (guarded by a `killed` flag). Byte layout stays symmetric because
+  `Character::OnEntityUpdate` always consumes exactly the transforms+syncTime the authority wrote.
+- `f4mp.cpp`: `SetEntVarNum`/`GetEntVarNum` generalized from `GetAs<Player>` to `Entity::Get`
+  so the `health` Number works on NPC entities too (anim variants stay Player-specific).
+- `F4MPQuest.psc`: new `npcSyncTimerID` poll (`SyncSharedNPCHealth`) pushes each nearby enemy's
+  `GetValuePercentage(healthAV)` into its entity via the existing `SetEntVarNum` native. Only the
+  owner actually streams it out; on non-owners it's a harmless local write.
+
+**Still TODO for full Level 1:**
+- **Cross-client damage routing.** Today an enemy only loses health on the machine whose player
+  hits it; that owner then streams the result. If a *non-owner* shoots a shared enemy, the hit
+  must travel to the owner to register. The `Hit`/`HitData` channel + server `OnHit`
+  (routes to `librg_entity_control_get(hittee)`) is the right pipe — extend it so an NPC hittee
+  applies `DamageValue` on the owner's real actor (mirror `F4MPPlayer.OnHit` for shared NPCs).
+- Throttle the cell scan in `SyncSharedNPCHealth` (currently re-arms at 0s like the other timers
+  — fold into the A3 tick-cadence fix).
+- Optionally stop the receiver's local AI from re-deriving its own health (prevent revive jitter).
 
 ### 🟠 B2. Building / settlement sync is half-wired
 `SyncWorld` (`f4mp.cpp:1072`) scans the player's cell for static objects (formType 36) and

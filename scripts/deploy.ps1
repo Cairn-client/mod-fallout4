@@ -23,9 +23,14 @@
 .PARAMETER GetMod          Download + install the F4MP mod (f4mp.esp + scripts) and enable it.
 .PARAMETER SetEnvVar       Persist FALLOUT4_PATH so plain VS builds auto-copy the DLL.
 .PARAMETER All             Shortcut for -GetF4SE -GetMod -SetEnvVar.
+.PARAMETER CreationKitPath Path to the Creation Kit folder (auto-detected if omitted).
+.PARAMETER Uninstall       Remove the F4MP mod files this script installed (see -RemoveF4SE).
+.PARAMETER RemoveF4SE      With -Uninstall, also remove the F4SE loader files.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 -All
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 -Uninstall
 #>
 [CmdletBinding()]
 param(
@@ -36,7 +41,10 @@ param(
     [switch]$GetF4SE,
     [switch]$GetMod,
     [switch]$SetEnvVar,
-    [switch]$All
+    [switch]$All,
+    [string]$CreationKitPath,
+    [switch]$Uninstall,
+    [switch]$RemoveF4SE
 )
 
 $ErrorActionPreference = 'Stop'
@@ -129,6 +137,73 @@ function Find-Fallout4 {
     return $null
 }
 
+# ---------- Creation Kit (Papyrus compiler) ----------
+function Find-CreationKit($fo4) {
+    if ($CreationKitPath -and (Test-Path (Join-Path $CreationKitPath 'Papyrus Compiler\PapyrusCompiler.exe'))) {
+        return $CreationKitPath.TrimEnd('\')
+    }
+    # CK installed straight into the game folder (classic layout)
+    if (Test-Path (Join-Path $fo4 'Papyrus Compiler\PapyrusCompiler.exe')) { return $fo4 }
+    # CK as a separate Steam app folder, e.g. "...\steamapps\common\Fallout 4 1946160"
+    $parent = Split-Path -Parent $fo4
+    $sib = Get-ChildItem $parent -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName 'Papyrus Compiler\PapyrusCompiler.exe') } |
+        Select-Object -First 1
+    if ($sib) { return $sib.FullName }
+    return $null
+}
+
+# Extract the CK's Base.zip (vanilla script sources + the flags file) if not already done.
+function Ensure-BaseSources($ckRoot) {
+    $base = Join-Path $ckRoot 'Data\Scripts\Source\Base'
+    if (Test-Path (Join-Path $base 'Actor.psc')) { return $base }
+    $zip = Join-Path $base 'Base.zip'
+    if (-not (Test-Path $zip)) { return $null }
+    Info "Extracting base script sources (Base.zip) ..."
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $z = [System.IO.Compression.ZipFile]::OpenRead($zip)
+    foreach ($e in $z.Entries) {
+        if ($e.Name) {
+            $t = Join-Path $base $e.FullName
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $t) | Out-Null
+            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $t, $true)
+        }
+    }
+    $z.Dispose()
+    return $base
+}
+
+# ---------- uninstall ----------
+function Uninstall-Mod($fo4) {
+    $data = Join-Path $fo4 'Data'
+    $count = 0
+    $targets = @((Join-Path $data 'F4SE\Plugins\f4mp.dll'), (Join-Path $data 'f4mp.esp'))
+    foreach ($pat in @('Scripts\F4MP*.pex', 'Scripts\Fragments\Quests\QF_F4MP_*.pex', 'Scripts\Source\User\F4MP*.psc')) {
+        Get-ChildItem (Join-Path $data (Split-Path $pat -Parent)) -Filter (Split-Path $pat -Leaf) -ErrorAction SilentlyContinue |
+            ForEach-Object { $targets += $_.FullName }
+    }
+    foreach ($t in $targets) {
+        if (Test-Path $t) { Remove-Item $t -Force; Good "Removed $t"; $count++ }
+    }
+    $pl = Join-Path $env:LOCALAPPDATA 'Fallout4\plugins.txt'
+    if (Test-Path $pl) {
+        (Get-Content $pl) | Where-Object { $_ -notmatch '(?i)^\*?f4mp\.esp$' } | Set-Content $pl
+        Good "Removed f4mp.esp from plugins.txt"
+    }
+    [Environment]::SetEnvironmentVariable('FALLOUT4_PATH', $null, 'User')
+    Good "Cleared FALLOUT4_PATH"
+    if ($RemoveF4SE) {
+        foreach ($f in @('f4se_loader.exe', 'f4se_1_10_163.dll', 'f4se_steam_loader.dll', 'f4se_readme.txt', 'f4se_whatsnew.txt')) {
+            $p = Join-Path $fo4 $f
+            if (Test-Path $p) { Remove-Item $p -Force; Good "Removed $f"; $count++ }
+        }
+        Warn "Left F4SE's Data\Scripts entries (they share vanilla names -- removing risks the game)."
+    }
+    else { Info "Left F4SE installed (pass -RemoveF4SE to also remove its loader files)." }
+    Warn "Left the Fallout4Custom.ini loose-files setting (other mods may rely on it)."
+    Good "Uninstall complete -- removed $count file(s)."
+}
+
 # ---------- F4SE 0.6.23 ----------
 function Install-F4SE($fo4) {
     $arc = Join-Path $env:TEMP 'f4se_0_06_23.7z'
@@ -214,6 +289,13 @@ if (-not $Fallout4Path -or -not (Test-Path (Join-Path $Fallout4Path 'Fallout4.ex
 $Fallout4Path = $Fallout4Path.TrimEnd('\')
 Good "Fallout 4: $Fallout4Path"
 
+if ($Uninstall) {
+    Write-Host ''
+    Uninstall-Mod $Fallout4Path
+    Write-Host ''
+    exit 0
+}
+
 $ver = (Get-Item (Join-Path $Fallout4Path 'Fallout4.exe')).VersionInfo.ProductVersion
 $wrongVer = $ver -and -not $ver.StartsWith('1.10.163')
 if ($wrongVer) {
@@ -257,25 +339,41 @@ foreach ($f in @('F4MP.psc', 'F4MPQuest.psc', 'F4MPPlayer.psc', 'F4MPFirePoint.p
 Good "Copied Papyrus sources -> Data\Scripts\Source\User\"
 
 # Recompile our updated scripts (enables the new NPC sync / damage routing) if the CK is present.
-$papyrus = Join-Path $Fallout4Path 'Papyrus Compiler\PapyrusCompiler.exe'
+# Compiler must see, in priority order: our sources, then F4SE's extended sources (they define
+# RegisterForExternalEvent / RegisterForKey / InstanceData), then the vanilla Base sources.
+$ckRoot = Find-CreationKit $Fallout4Path
 $scriptsOut = Join-Path $Fallout4Path 'Data\Scripts'
-if (Test-Path $papyrus) {
+if ($ckRoot) {
+    Good "Creation Kit: $ckRoot"
+    $pc = Join-Path $ckRoot 'Papyrus Compiler\PapyrusCompiler.exe'
+    $ckBase = Ensure-BaseSources $ckRoot
+    $f4seSrc = Join-Path $Fallout4Path 'Data\Scripts\Source'
     New-Item -ItemType Directory -Force -Path $scriptsOut | Out-Null
-    $importPath = "$srcDir;$userSrcDir;$(Join-Path $Fallout4Path 'Data\Scripts\Source\Base')"
-    $ok = $true
-    foreach ($f in @('F4MP.psc', 'F4MPQuest.psc', 'F4MPPlayer.psc', 'F4MPFirePoint.psc')) {
-        $p = Join-Path $srcDir $f
-        if (-not (Test-Path $p)) { continue }
-        Info "Compiling $f ..."
-        & $papyrus $p -import="$importPath" -output="$scriptsOut" -flags='Institute_Papyrus_Flags.flg' -optimize
-        if ($LASTEXITCODE -ne 0) { $ok = $false; Warn "Failed to compile $f" }
+
+    if (-not (Test-Path (Join-Path $f4seSrc 'ScriptObject.psc'))) {
+        Warn "F4SE script sources missing from $f4seSrc -- the scripts won't compile."
+        Warn "Run with -GetF4SE (or -All) first; skipping .pex compile (baseline .pex kept)."
     }
-    if ($ok) { Good "Compiled updated .pex -> Data\Scripts\ (new features active)" }
+    elseif (-not $ckBase) {
+        Warn "Base script sources (Base.zip) not found in the CK; skipping .pex compile."
+    }
+    else {
+        $importPath = "$srcDir;$f4seSrc;$ckBase"
+        $ok = $true
+        foreach ($name in @('F4MP', 'F4MPQuest', 'F4MPPlayer', 'F4MPFirePoint')) {
+            Info "Compiling $name ..."
+            & $pc $name -import="$importPath" -output="$scriptsOut" -flags='Institute_Papyrus_Flags.flg' -optimize 2>&1 |
+                Select-Object -Last 2 | ForEach-Object { Write-Host "       $_" -ForegroundColor DarkGray }
+            if ($LASTEXITCODE -ne 0) { $ok = $false; Warn "Failed to compile $name" }
+        }
+        if ($ok) { Good "Compiled updated .pex -> Data\Scripts\ (NEW features active)" }
+        else { Warn "Some scripts failed to compile -- baseline .pex left in place." }
+    }
 }
 else {
-    Warn "Creation Kit compiler not found -- using baseline .pex from the mod download."
-    Warn "Our NEW features (NPC sync / damage routing) stay dormant until you install"
-    Warn "the Creation Kit and re-run (it will recompile F4MP.pex + F4MPQuest.pex)."
+    Warn "Creation Kit not found -- using baseline .pex from the mod download."
+    Warn "Our NEW features (NPC sync / damage routing) stay dormant until you install the"
+    Warn "Creation Kit (or pass -CreationKitPath) and re-run; it recompiles the scripts."
 }
 
 if ($SetEnvVar) {

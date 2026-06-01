@@ -647,6 +647,17 @@ void f4mp::F4MP::OnDisonnect(librg_event* event)
 	F4MP& self = GetInstance();
 
 	self.player->OnDisonnect(event);
+
+	// A2 (cleanup half): notify Papyrus that the link dropped so F4MPQuest can
+	// delete the cloned remote-player actors it spawned and cancel the network
+	// timers. Without this they linger as frozen ghosts after a disconnect.
+	// (Auto-reconnect/backoff is the other half of A2 and needs runtime testing.)
+	self.papyrus->GetExternalEventRegistrations("OnDisconnect", nullptr, [](UInt64 handle, const char* scriptName, const char* callbackName, void* dataPtr)
+		{
+			// SendPapyrusEvent1 takes its arg by non-const reference, so pass an lvalue.
+			UInt32 reason = 0;
+			SendPapyrusEvent1<UInt32>(handle, scriptName, callbackName, reason);
+		});
 }
 
 void f4mp::F4MP::OnEntityCreate(librg_event* event)

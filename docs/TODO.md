@@ -37,10 +37,10 @@ goes half-open. Today this "works" only because A1 disabled the server timeout.
   task/own thread, or at minimum send an application-level heartbeat so both ends know the peer
   is alive across VM pauses. This is the linchpin that makes A1 safe to fix.
 
-### 🟠 A4. `Connect()` starts timers before knowing if the connection succeeded
-`F4MPQuest.psc:122-130` calls `StartTimer` for tick + update **before** `F4MP.Connect` returns,
-and ignores the bool result. On a failed connect the timers keep ticking a dead context.
-- **Fix:** only start timers when `F4MP.Connect` returns true; stop them on disconnect/failure.
+### ✅ A4. `Connect()` starts timers before knowing if the connection succeeded — DONE (2026-06-01)
+`F4MPQuest.Connect` now captures `F4MP.Connect`'s result and only `StartTimer`s the
+tick/update/npc-sync timers when it's true. (Stop-on-disconnect is folded into A2.)
+Papyrus recompiles clean. Not runtime-tested.
 
 ### 🟠 A5. Fragile object lifetime: `delete this` in event handlers
 Server `Entity::OnDisonnect` (`Entity.cpp:70`) and `Player::OnConnectRefuse`
@@ -51,12 +51,10 @@ free → server crash (= everyone drops).
   delete-then-null in `Entity::OnDisonnect`), and guard all `Entity::Get(...)` call sites for
   null (most already do; audit the message handlers).
 
-### 🟠 A6. No config validation on either side
-Server `main.cpp:18-24` reads `address`/`port` from `server_config.txt` with no validation —
-a malformed file yields a garbage bind address/port and a silent failure to listen. Client
-`config.txt` (`f4mp.cpp:75-86`) similarly trusts the file.
-- **Fix:** validate address/port; on bind failure, log clearly and exit non-zero (server) or
-  surface an error to the player (client).
+### ✅ A6. No config validation on either side — DONE (2026-06-01)
+Server clamps an invalid/missing port back to 7779 with a warning and logs the bind target
+(`address:port`, or "all interfaces"). Client defaults a blank `config.txt` host to `localhost`.
+Turns silent bind/connect failures into clear messages. Compiles. Not runtime-tested.
 
 ### 🟡 A7. No graceful server shutdown / no connection logging summary
 `f4mp_server/main.cpp:40` is `while(true){ Tick(); }` with no signal handling. Can't drain
@@ -136,10 +134,9 @@ load orders.
 
 ## C. Latent bugs (correctness)
 
-### 🟠 C1. Inverted condition in `GetAction`
-`f4mp.cpp:145` — `if (std::string(actions[i]->GetFullName()).compare(name.c_str()))` returns the
-action when names **differ** (`.compare` returns 0 on a match). Should be `== 0`. Returns the
-wrong action / first non-match.
+### ✅ C1. Inverted condition in `GetAction` — DONE (2026-06-01)
+Now compares `== 0`, so `GetAction` returns the action whose name actually matches instead of
+the first non-matching one. Compiles.
 
 ### 🟡 C2. Hardcoded magic values
 Server spawn point `(886, -426, -1550)` (`Server.h:45`); connect keybind F1=112 and target
@@ -151,17 +148,21 @@ Server spawn point `(886, -426, -1550)` (`Server.h:45`); connect keybind F1=112 
 toggled by key 113. Each instance owns its own `librg_ctx`. Easy source of subtle bugs; document
 or gate behind a flag.
 
-### 🟡 C4. `Player::GetInteger` does an unchecked map lookup
-`Player.cpp:131` — `integers.find(name)->second` dereferences `end()` if the key is missing
-(author comment: *"HACK: horrible"*). Crash risk.
+### ✅ C4. Unchecked map lookups — DONE (2026-06-01)
+Both `Player::GetInteger` and `Entity::GetNumber` now check the iterator and return 0 for a
+missing key instead of dereferencing `end()`. Removes a latent client crash. Compiles.
 
 ---
 
 ## Suggested order of attack (stability first)
-1. **A3** (decouple ticking / heartbeat) → unblocks **A1** (re-enable server timeout) → **A2**
-   (client reconnect + cleanup). This trio is what actually keeps players connected.
-2. **A5 / A4 / A6** — harden lifetime, connect flow, and config.
-3. **C1, C4** quick correctness fixes.
+1. ✅ **A4 / A6** (connect flow + config) and ✅ **C1 / C4** (correctness/crash) — DONE 2026-06-01,
+   the safe, compile-verified wins.
+2. **A3** (decouple ticking / heartbeat) → unblocks **A1** (re-enable server timeout) → **A2**
+   (client reconnect + cleanup). **This trio is the remaining priority** and is the risky part:
+   A3 changes the network-tick threading (currently driven by a Papyrus 0-sec timer that stalls
+   during loads/menus), so it needs careful implementation **and runtime validation** with two
+   clients before A1's timeout re-enable is safe.
+3. **A5** — harden object lifetime (`delete this` in server event handlers).
 4. Then feature work: **B1** (NPC sync) and **B2** (buildings) for real shared gameplay.
 
 ---

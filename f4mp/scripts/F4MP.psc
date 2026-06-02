@@ -39,3 +39,13 @@ Function TopicInfoBegin(Form info, ObjectReference speaker) global native
 
 ObjectReference[] Function GetEntitySyncRefs(bool clear) global native
 float[] Function GetEntitySyncTransforms(bool clear) global native
+
+; --- Steam Networking Phase 0 spike (steam-net) ---
+; Only registered by the plugin when built with /p:F4MPSteam=true. On the default
+; (enet) build these are unregistered, so calling them is a no-op error at runtime,
+; not a compile error. See docs/STEAM_NETWORKING.md.
+; Usage: SteamHost() on one client, SteamJoin() on a Steam-friend's client, and
+; SteamPoll() on a repeating timer on both. Watch the plugin console for RECV "hello"/"ack".
+Function SteamHost() global native
+Function SteamJoin() global native
+Function SteamPoll() global native

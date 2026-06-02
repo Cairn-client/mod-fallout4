@@ -54,25 +54,53 @@ roadmap, and known polish items).
 
 ---
 
-## Quick start (recommended)
+## How to install & play
 
-Helper scripts in [`scripts/`](scripts/) build everything and install it for you.
+There are two paths, depending on whether you just want to **play** or want to
+**build from source**. Pick one.
 
-### Full setup (downloads F4SE + the mod, builds, installs, enables)
-Double-click **`scripts\setup-everything.bat`** (needs an internet connection). It:
+---
 
-1. auto-detects Visual Studio's MSBuild and your Fallout 4 install,
-2. builds `f4mp.dll`,
-3. downloads & installs **F4SE 0.6.23** into the game folder,
-4. downloads & installs the **F4MP mod** (`f4mp.esp` + scripts) and enables it,
-5. compiles the updated Papyrus scripts to `.pex` *(if the Creation Kit is installed)*,
-6. prints a coloured summary — anything yellow is a manual step it can't do.
+### A) Players — easiest (no Visual Studio, no Creation Kit, no source code)
 
-### Just rebuild + redeploy your local changes
-Double-click **`scripts\deploy.bat`** (no downloads — builds `f4mp.dll`, copies it and
-the scripts into the game).
+Use the prebuilt **release** — you run a single installer.
 
-### Script options
+1. **Download** the latest `F4MP-Steam-*.zip` from the **[Releases page](../../releases)**.
+2. **Extract the whole zip.** Your browser saves it to your **Downloads** folder; right-click
+   the zip → **Extract All**. Keep `Install-F4MP.bat`, `Install-F4MP.ps1`, `README.txt`, and the
+   `Data` folder together in the extracted folder.
+3. **Right-click `Install-F4MP.bat` → "Run as administrator."**
+   It auto-detects Fallout 4, checks the version, downloads **F4SE 0.6.23** if it's missing,
+   copies the mod files in, and enables the plugin.
+   *(If your game isn't found, run `Install-F4MP.ps1 -Fallout4Path "X:\...\Fallout 4"` from a terminal.)*
+4. Make sure Fallout 4 is on **1.10.163** — see [Requirements](#requirements). Downgrade first
+   if you're on the Next-Gen update.
+5. **Launch the game with `f4se_loader.exe`** (in your Fallout 4 folder — *not* the normal Steam
+   Play button). Load a save.
+6. **Connect:**
+   - **Steam co-op** (both players Steam friends, both on this build): one presses **F5** to host
+     a lobby, the other presses **F6** to join.
+   - **Classic direct-IP:** press **F1** (requires a running server — see [Server](#server)).
+
+> 🟢 **Players do _not_ need Visual Studio, the Creation Kit, or this source repo — just the release zip.**
+
+---
+
+### B) Developers — build from source
+
+This path **does** require **Visual Studio 2022/2026** (or the standalone *Build Tools for Visual
+Studio*) with the **Desktop development with C++** workload, plus the **Creation Kit** to recompile
+the Papyrus scripts. See [Requirements](#requirements).
+
+The helper scripts in [`scripts/`](scripts/) build and install everything for you:
+
+- **Full setup** — double-click **`scripts\setup-everything.bat`** (needs internet). It auto-detects
+  your *already-installed* Visual Studio's MSBuild **(it does _not_ install Visual Studio — you must
+  have it first)** and your Fallout 4 install, builds `f4mp.dll`, downloads & installs F4SE 0.6.23 +
+  the mod, enables it, and compiles the Papyrus scripts (if the CK is present).
+- **Rebuild + redeploy your local changes** — double-click **`scripts\deploy.bat`** (no downloads).
+
+#### Script options
 Run from a terminal (or append after the `.bat`):
 
 ```powershell
@@ -162,9 +190,17 @@ Anyone on your local network can connect. To play over the internet, forward por
 
 ## Running the game
 
+Launch Fallout 4 via **`f4se_loader.exe`** (not the normal launcher) and load a save. Then connect one of two ways:
+
+**Steam co-op (no server, no IP — recommended):** both players must be Steam friends on the same build.
+- One player presses **`F5`** to host a Steam lobby.
+- The other presses **`F6`** to join it.
+- The console window prints `RECV "hello…"` / `RECV "ack…"` once the peer link is up.
+
+**Classic direct-IP:**
 1. Start `f4mp_server.exe`.
-2. Launch Fallout 4 via **`f4se_loader.exe`** (not the normal launcher).
-3. Load a save and press **`F1`** to connect.
+2. Launch via `f4se_loader.exe`, load a save.
+3. Press **`F1`** to connect.
 
 ---
 

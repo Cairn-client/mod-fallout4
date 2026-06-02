@@ -4,16 +4,20 @@
 **************************************************************
 
 ==============================================================
- F4MP - Fallout 4 Multiplayer (Steam build)  -  install guide
+ F4MP - Fallout 4 Multiplayer (classic direct-IP)  -  install guide
 ==============================================================
 
 WHAT THIS IS
-  A co-op mod for Fallout 4. This build includes the experimental Steam
-  Networking spike: friends can connect by Steam lobby (press F5 to host,
-  F6 to join) with no port-forwarding or IP sharing.
+  A co-op mod for Fallout 4. Players connect directly: one person hosts
+  (runs the included f4mp_server.exe), the others enter the host's IP and
+  connect in-game with F1. No Steam lobby is used in this build.
 
-  This is in-development / spike software. Expect bugs and crashes. Back up
-  your saves first. Do not run other Fallout 4 mods alongside it.
+  This is in-development software. Expect bugs and crashes. Back up your
+  saves first. Do not run other Fallout 4 mods alongside it.
+
+  (A Steam-relay transport that needs no IP sharing is still in development
+  and is NOT included here - an earlier spike build of it could prevent the
+  game from launching, so it has been removed from this release.)
 
 ------------------------------------------------------------
  REQUIREMENTS (every player needs these)
@@ -25,8 +29,10 @@ WHAT THIS IS
      or a 1.10.163 backup).
   2. F4SE 0.6.23 (the 1.10.163 build). The installer downloads this for you
      if it's missing.
-  3. Both players must be Steam friends (the co-op lobby is friends-only),
-     and both must have THIS SAME build installed.
+  3. Everyone installs THIS SAME build. To connect, players need the host's
+     IP address and the host must allow the F4MP port (7779 TCP+UDP) through
+     their firewall / router (port-forward) for internet play; on a LAN no
+     forwarding is needed.
 
 ------------------------------------------------------------
  HOW TO INSTALL
@@ -40,11 +46,9 @@ WHAT THIS IS
      If auto-detect fails, open PowerShell in this folder and run:
         .\Install-F4MP.ps1 -Fallout4Path "X:\path\to\Fallout 4"
 
-  NOTE: the installer replaces Fallout 4's steam_api64.dll with a newer one
-  (Fallout 4's is too old for Steam co-op). Your original is backed up as
-  steam_api64.dll.orig and is restored by -Uninstall. If you ever "Verify
-  integrity of game files" in Steam, it restores the old DLL -> just run the
-  installer again.
+  This installer does NOT touch Fallout 4's steam_api64.dll. (If a previous
+  Steam-spike build of F4MP swapped yours and the game stopped launching,
+  run  .\Install-F4MP.ps1 -Uninstall  to restore the original.)
 
 ------------------------------------------------------------
  HOW TO PLAY
@@ -52,12 +56,11 @@ WHAT THIS IS
   1. Launch the game with  f4se_loader.exe  (NOT the normal launcher / Steam
      Play button).
   2. Load a save. A small console window opens showing F4MP status.
-  3. Co-op (Steam):
-        - One player presses  F5  to HOST a lobby.
-        - The other presses   F6  to JOIN (finds the friend's lobby).
-        - The console prints   RECV "hello..."  /  RECV "ack..."  when the
-          peer-to-peer link is up.
-     (The classic direct-IP path is still on F1; see the project README.)
+  3. Direct-IP co-op:
+        - One player runs  f4mp_server.exe  to host (default port 7779).
+        - Each other player sets the host's address in  config.txt
+          (blank = localhost), then presses  F1  in-game to connect.
+        - The console shows connection status.
 
 ------------------------------------------------------------
  UNINSTALL

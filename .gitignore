@@ -55,3 +55,9 @@ f4mp/scripts/.vscode/settings.json
 f4mp/scripts/copy.bat
 
 f4mp_server/scripts/bin
+
+# Steamworks SDK — vendored locally per machine, NOT committed (size + redistribution).
+# User installed it here; used by the steam-net branch's Steam Networking work.
+steamworks_sdk_164/
+thirdparty/steamworks/*
+!thirdparty/steamworks/README.md

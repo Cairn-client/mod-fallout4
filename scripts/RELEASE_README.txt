@@ -40,6 +40,12 @@ WHAT THIS IS
      If auto-detect fails, open PowerShell in this folder and run:
         .\Install-F4MP.ps1 -Fallout4Path "X:\path\to\Fallout 4"
 
+  NOTE: the installer replaces Fallout 4's steam_api64.dll with a newer one
+  (Fallout 4's is too old for Steam co-op). Your original is backed up as
+  steam_api64.dll.orig and is restored by -Uninstall. If you ever "Verify
+  integrity of game files" in Steam, it restores the old DLL -> just run the
+  installer again.
+
 ------------------------------------------------------------
  HOW TO PLAY
 ------------------------------------------------------------

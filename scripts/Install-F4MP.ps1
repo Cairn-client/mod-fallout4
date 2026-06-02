@@ -111,6 +111,25 @@ function Install-F4SE($fo4) {
     else { Warn "F4SE copied but f4se_loader.exe not found -- check manually." }
 }
 
+function Install-SteamApi($fo4) {
+    # Fallout 4's bundled steam_api64.dll is too old for the Steam Networking API
+    # (no SteamInternal_ContextInit / ISteamNetworkingMessages). Drop in the newer
+    # SDK 1.64 redistributable, backing up the game's original once.
+    $src = Join-Path $PkgRoot 'steam_api64.dll'
+    if (-not (Test-Path $src)) {
+        Warn "Bundled steam_api64.dll missing from this package -- Steam co-op (F5/F6) will fail to load."
+        return
+    }
+    $dst = Join-Path $fo4 'steam_api64.dll'
+    $bak = Join-Path $fo4 'steam_api64.dll.orig'
+    if ((Test-Path $dst) -and -not (Test-Path $bak)) {
+        Copy-Item $dst $bak -Force
+        Good "Backed up game's original steam_api64.dll -> steam_api64.dll.orig"
+    }
+    Copy-Item $src $dst -Force
+    Good "Installed Steam-networking steam_api64.dll (SDK 1.64) -> game root"
+}
+
 function Enable-Plugin {
     $pl = Join-Path $env:LOCALAPPDATA 'Fallout4\plugins.txt'
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $pl) | Out-Null
@@ -147,6 +166,12 @@ function Uninstall-Mod($fo4) {
     if (Test-Path $pl) {
         (Get-Content $pl) | Where-Object { $_ -notmatch '(?i)^\*?f4mp\.esp$' } | Set-Content $pl
         Good "Disabled f4mp.esp in plugins.txt"
+    }
+    $bak = Join-Path $fo4 'steam_api64.dll.orig'
+    if (Test-Path $bak) {
+        Copy-Item $bak (Join-Path $fo4 'steam_api64.dll') -Force
+        Remove-Item $bak -Force
+        Good "Restored game's original steam_api64.dll"
     }
     Good "Uninstall complete."
 }
@@ -198,6 +223,7 @@ if (-not (Test-Path $srcData)) {
 Copy-Tree $srcData (Join-Path $Fallout4Path 'Data')
 Good "Installed mod files (f4mp.dll + f4mp.esp + scripts) -> Data\"
 
+Install-SteamApi $Fallout4Path
 Enable-Plugin
 Set-LooseFilesIni
 

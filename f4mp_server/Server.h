@@ -182,7 +182,11 @@ namespace f4mp
 			NPC* npc = Entity::Create(entity, new NPC(data.formID, data.ownerEntityID));
 
 			data.entityID = entity->id;
-			data.ownerEntityID = Entity::GetAs<Player>(msg->peer)->GetEntityID();
+			// A5: guard the peer lookup. After a disconnect we null peer->data,
+				// so a message still in flight from a half-gone peer would otherwise
+				// crash here. Fall back to "no owner" rather than dereferencing null.
+				Player* spawnOwner = Entity::GetAs<Player>(msg->peer);
+				data.ownerEntityID = spawnOwner ? spawnOwner->GetEntityID() : (u32)-1;
 
 			instance->entityIDs[data.formID] = data.entityID;
 
@@ -203,7 +207,14 @@ namespace f4mp
 				}
 			}
 
-			u32 callerID = Entity::Get(msg->peer)->GetEntityID();
+			// A5: guard against a null peer (disconnected mid-message); ignore
+				// the sync rather than dereferencing a freed/cleared peer.
+				Entity* caller = Entity::Get(msg->peer);
+				if (!caller)
+				{
+					return;
+				}
+				u32 callerID = caller->GetEntityID();
 			float minDist = zpl_vec3_mag2(data.position - librg_entity_fetch(msg->ctx, callerID)->position);
 
 			librg_entity_iteratex(msg->ctx, LIBRG_ENTITY_ALIVE | LIBRG_ENTITY_CLIENT, id,

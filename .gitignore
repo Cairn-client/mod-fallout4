@@ -56,7 +56,10 @@ f4mp/scripts/copy.bat
 
 f4mp_server/scripts/bin
 
-# Steamworks SDK — vendored locally per machine, NOT committed (license/redistribution).
-# See thirdparty/steamworks/README.md for what to drop here.
+# Steamworks SDK — vendored locally per machine, NOT committed (license/redistribution + size).
+# See thirdparty/steamworks/README.md for the canonical drop-in layout.
+# The user-installed copy lives at steamworks_sdk_164/ (used by the steam-net Steam Networking work).
+steamworks_sdk_164/
+steamworks_sdk_*.zip
 thirdparty/steamworks/*
 !thirdparty/steamworks/README.md

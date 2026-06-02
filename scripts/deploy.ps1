@@ -384,8 +384,9 @@ if ($SetEnvVar) {
 # ---------- summary ----------
 Write-Host ''
 Write-Host '=== Done. Remaining MANUAL steps the script cannot do: ===' -ForegroundColor White
-if (-not $GetF4SE) { Warn "- F4SE not installed (run with -GetF4SE or -All)." }
-if (-not $GetMod) { Warn "- f4mp.esp not installed (run with -GetMod or -All)." }
+# Report on actual presence, not just whether the flag was passed this run.
+if (-not (Test-Path (Join-Path $Fallout4Path 'f4se_loader.exe'))) { Warn "- F4SE not installed (run with -GetF4SE or -All)." }
+if (-not (Test-Path (Join-Path $Fallout4Path 'Data\f4mp.esp'))) { Warn "- f4mp.esp not installed (run with -GetMod or -All)." }
 if ($wrongVer) { Warn "- Downgrade Fallout 4 to 1.10.163 (current: $ver). Steam can't automate this." }
 Write-Host ''
 Good  "When on 1.10.163 with F4SE: launch f4se_loader.exe, load a save, press F1 to connect."

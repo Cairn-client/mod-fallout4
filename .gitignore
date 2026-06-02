@@ -63,3 +63,6 @@ steamworks_sdk_164/
 steamworks_sdk_*.zip
 thirdparty/steamworks/*
 !thirdparty/steamworks/README.md
+
+# Release packaging output (built artifacts; published as GitHub release assets, not committed).
+dist/

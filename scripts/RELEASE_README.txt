@@ -1,3 +1,8 @@
+**************************************************************
+ *** IN DEVELOPMENT ***  Unfinished / experimental software.
+ Expect bugs, crashes, and broken features. Back up your saves.
+**************************************************************
+
 ==============================================================
  F4MP - Fallout 4 Multiplayer (Steam build)  -  install guide
 ==============================================================

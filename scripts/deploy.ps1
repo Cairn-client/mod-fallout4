@@ -38,6 +38,7 @@ param(
     [ValidateSet('Debug', 'Release')][string]$Configuration = 'Debug',
     [switch]$SkipBuild,
     [switch]$BuildServer,
+    [switch]$Steam,
     [switch]$GetF4SE,
     [switch]$GetMod,
     [switch]$SetEnvVar,
@@ -177,7 +178,8 @@ function Ensure-BaseSources($ckRoot) {
 function Uninstall-Mod($fo4) {
     $data = Join-Path $fo4 'Data'
     $count = 0
-    $targets = @((Join-Path $data 'F4SE\Plugins\f4mp.dll'), (Join-Path $data 'f4mp.esp'))
+    $targets = @((Join-Path $data 'F4SE\Plugins\f4mp.dll'),
+        (Join-Path $data 'F4SE\Plugins\steam_api64_f4mp.dll'), (Join-Path $data 'f4mp.esp'))
     foreach ($pat in @('Scripts\F4MP*.pex', 'Scripts\Fragments\Quests\QF_F4MP_*.pex', 'Scripts\Source\User\F4MP*.psc')) {
         Get-ChildItem (Join-Path $data (Split-Path $pat -Parent)) -Filter (Split-Path $pat -Leaf) -ErrorAction SilentlyContinue |
             ForEach-Object { $targets += $_.FullName }
@@ -313,8 +315,10 @@ if (-not $SkipBuild) {
     $projects = @("$RepoRoot\f4mp\f4mp.vcxproj")
     if ($BuildServer) { $projects += "$RepoRoot\f4mp_server\f4mp_server.vcxproj" }
     foreach ($proj in $projects) {
-        Info "Building $(Split-Path -Leaf $proj) ($Configuration|x64) ..."
-        & $msbuild $proj /p:Configuration=$Configuration /p:Platform=x64 /p:SolutionDir="$RepoRoot\" /v:minimal /nologo
+        $extra = @()
+        if ($Steam -and $proj -like '*f4mp.vcxproj') { $extra += '/p:F4MPSteam=true' }
+        Info "Building $(Split-Path -Leaf $proj) ($Configuration|x64)$(if ($extra) { ' [Steam]' }) ..."
+        & $msbuild $proj /p:Configuration=$Configuration /p:Platform=x64 /p:SolutionDir="$RepoRoot\" $extra /v:minimal /nologo
         if ($LASTEXITCODE -ne 0) { Fail "Build failed for $proj"; exit 1 }
         Good "Built $(Split-Path -Leaf $proj)"
     }
@@ -328,6 +332,17 @@ $pluginDir = Join-Path $Fallout4Path 'Data\F4SE\Plugins'
 New-Item -ItemType Directory -Force -Path $pluginDir | Out-Null
 Copy-Item $dll (Join-Path $pluginDir 'f4mp.dll') -Force
 Good "Copied our f4mp.dll -> Data\F4SE\Plugins\"
+
+# Steam build loads its Steam networking API from a PRIVATELY-NAMED copy of the SDK
+# redistributable, so the game's own (old) steam_api64.dll is never touched.
+if ($Steam) {
+    $shimSrc = "$RepoRoot\steamworks_sdk_164\sdk\redistributable_bin\win64\steam_api64.dll"
+    if (Test-Path $shimSrc) {
+        Copy-Item $shimSrc (Join-Path $pluginDir 'steam_api64_f4mp.dll') -Force
+        Good "Copied Steam shim -> Data\F4SE\Plugins\steam_api64_f4mp.dll (game's steam_api64.dll untouched)"
+    }
+    else { Warn "Steamworks SDK DLL not found at $shimSrc -- Steam co-op natives (F5/F6) will no-op." }
+}
 
 $srcDir = "$RepoRoot\f4mp\scripts"
 $userSrcDir = Join-Path $Fallout4Path 'Data\Scripts\Source\User'

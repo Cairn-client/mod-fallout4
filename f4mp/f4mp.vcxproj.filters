@@ -108,6 +108,12 @@
     <ClCompile Include="Animations.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="SteamSpike.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="SteamApiLoader.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="exports.def">
@@ -158,6 +164,12 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Animations.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="SteamSpike.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="SteamApiLoader.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

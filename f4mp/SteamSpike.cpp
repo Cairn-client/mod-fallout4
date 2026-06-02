@@ -2,6 +2,7 @@
 
 #ifdef F4MP_STEAM
 
+#include "SteamApiLoader.h"
 #include <cstdio>
 
 namespace f4mp
@@ -27,6 +28,12 @@ namespace f4mp
 
 	bool SteamSpike::Host()
 	{
+		if (!f4mp::steamapi::EnsureInit())
+		{
+			printf("[steam-spike] Steam API not initialised (steam_api64_f4mp.dll) — cannot host.\n");
+			return false;
+		}
+
 		if (!SteamMatchmaking())
 		{
 			printf("[steam-spike] SteamMatchmaking() unavailable — is Steam running?\n");
@@ -43,6 +50,12 @@ namespace f4mp
 
 	bool SteamSpike::Join()
 	{
+		if (!f4mp::steamapi::EnsureInit())
+		{
+			printf("[steam-spike] Steam API not initialised (steam_api64_f4mp.dll) — cannot join.\n");
+			return false;
+		}
+
 		if (!SteamMatchmaking())
 		{
 			printf("[steam-spike] SteamMatchmaking() unavailable — is Steam running?\n");

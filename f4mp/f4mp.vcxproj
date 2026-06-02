@@ -29,26 +29,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -184,13 +184,14 @@ copy /Y "$(ProjectDir)scripts\F4MPQuest.psc" "$(FALLOUT4_PATH)\Data\Scripts\Sour
        which intentionally don't carry a %(...) inherit token. Inert unless /p:F4MPSteam=true. -->
   <ItemDefinitionGroup Condition="'$(F4MPSteam)'=='true'">
     <ClCompile>
-      <PreprocessorDefinitions>F4MP_STEAM;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>F4MP_STEAM;STEAM_API_NODLL;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SteamworksDir)\public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <Link>
-      <AdditionalDependencies>steam_api64.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SteamworksDir)\redistributable_bin\win64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-    </Link>
+    <!-- Deliberately NO steam_api64.lib link. STEAM_API_NODLL turns the SDK's flat
+         S_API symbols into plain extern "C", which SteamApiLoader.cpp defines and
+         forwards at runtime to a privately-named steam_api64_f4mp.dll loaded from
+         the plugin's own folder. Result: steam_api64.dll stays OUT of the PE import
+         table, so the game's own (old) copy is never loaded by name -> no bricking. -->
   </ItemDefinitionGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\common\common_vc11.vcxproj">
@@ -232,6 +233,7 @@ copy /Y "$(ProjectDir)scripts\F4MPQuest.psc" "$(FALLOUT4_PATH)\Data\Scripts\Sour
     <ClCompile Include="f4mp.cpp" />
     <ClCompile Include="NPC.cpp" />
     <ClCompile Include="Player.cpp" />
+    <ClCompile Include="SteamApiLoader.cpp" />
     <ClCompile Include="SteamSpike.cpp" />
     <ClCompile Include="TopicInfoIDs.cpp" />
   </ItemGroup>
@@ -246,6 +248,7 @@ copy /Y "$(ProjectDir)scripts\F4MPQuest.psc" "$(FALLOUT4_PATH)\Data\Scripts\Sour
     <ClInclude Include="common.h" />
     <ClInclude Include="NPC.h" />
     <ClInclude Include="Player.h" />
+    <ClInclude Include="SteamApiLoader.h" />
     <ClInclude Include="SteamSpike.h" />
     <ClInclude Include="TopicInfoIDs.h" />
   </ItemGroup>

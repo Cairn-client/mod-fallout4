@@ -90,8 +90,14 @@ reviewable first move.
 - Download the **Steamworks SDK** (free; needs a Steam account + SDK access agreement)
   and vendor it under `thirdparty/steamworks/` (headers + `lib/win64`). Add it to
   `.gitignore` if redistribution is a concern, or commit per its terms.
-- `Fallout4.exe` already ships **`steam_api64.dll`** in the game root, so the client
-  plugin has the runtime; we just link the import lib and include `steam/steam_api.h`.
+- ⚠️ **`Fallout4.exe`'s bundled `steam_api64.dll` is too OLD** for the networking API
+  (no `SteamInternal_ContextInit` / `ISteamNetworkingMessages`), and FO4 1.10.163
+  hard-depends on its old exports — so we must NOT link the modern import lib (it bakes a
+  `steam_api64.dll` import that resolves against the game's old DLL → load failure) and we
+  must NOT swap the game's DLL (that breaks the game's own boot — it bricked installs).
+  **Instead:** compile with `STEAM_API_NODLL` and provide the flat symbols ourselves
+  (`f4mp/SteamApiLoader.{h,cpp}`), forwarding to a **privately-named** `steam_api64_f4mp.dll`
+  loaded via `LoadLibrary` from the plugin folder. The game's `steam_api64.dll` is untouched.
 - **Client (plugin):** the game already called `SteamAPI_Init`, so we can call
   `SteamNetworkingSockets()` / `SteamMatchmaking()` directly. Add a `steam_appid.txt`
   (377160) only for standalone test harnesses, not for the in-game plugin.
@@ -185,4 +191,19 @@ Phase 0 spike → transport shim. Both efforts live on this branch.
     `SteamJoin()` on a Steam friend's client, and `SteamPoll()` on a repeating timer on both. Watch the
     plugin console for `RECV "hello"` / `RECV "ack"` to confirm the relay works under FO4's App-ID.
     (The `SteamHost`/`SteamJoin`/`SteamPoll` natives are already declared in `F4MP.psc`.)
+- [x] **Phase 0b — privately-named DLL rework (commit `8874a17`).** The spike originally
+  static-linked `steam_api64.lib`, so the release installer swapped the game's
+  `steam_api64.dll` for the SDK one — which **bricked FO4 1.10.163's boot** (it needs its
+  old exports). Reworked to load the modern API under a separate name:
+  - `STEAM_API_NODLL` in the `F4MPSteam` build; `steam_api64.lib` link removed.
+  - New `f4mp/SteamApiLoader.{h,cpp}` defines the ~11 flat symbols the SDK headers expect
+    (`SteamInternal_ContextInit`, `FindOrCreateUserInterface`, `GetHSteamUser`, the 4
+    `Register/Unregister(Callback|CallResult)`, `RunCallbacks`) and forwards them to
+    `steam_api64_f4mp.dll` (`LoadLibrary`'d from the plugin folder); `EnsureInit()` calls
+    `SteamAPI_InitFlat`. `SteamSpike::Host()/Join()` call `EnsureInit()` first.
+  - `deploy.ps1 -Steam` ships `steam_api64_f4mp.dll` beside the plugin; never swaps the game's.
+  - **Verified:** `dumpbin /imports` on the `F4MPSteam=true` build shows **NO `steam_api64.dll`**
+    (only KERNEL32/USER32/SHELL32/WS2_32/WINMM); default build byte-identical.
+  - **Still owed (runtime):** two FO4 1.10.163 + Steam clients to confirm the relay round-trip,
+    AND that two Steam contexts (game's + ours) coexist cleanly in one process.
 - [ ] Phases 1–4.

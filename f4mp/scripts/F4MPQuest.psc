@@ -3,6 +3,7 @@ Scriptname F4MPQuest extends Quest
 int tickTimerID = 10
 int updateTimerID = 20
 int npcSyncTimerID = 30
+int steamPollTimerID = 40   ; steam-net Phase 0 spike: repeatedly pumps F4MP.SteamPoll()
 
 Actor Property playerRef Auto
 
@@ -22,6 +23,11 @@ bool topicInfosRegistered = false
 
 Event OnInit()
 	RegisterForKey(112)
+	; steam-net Phase 0 spike keybinds: F5 = SteamHost, F6 = SteamJoin.
+	; (F2/F3 = 113/114 are already used by the enet client toggle / debug sound,
+	;  so the spike uses the next free keys.)
+	RegisterForKey(116)
+	RegisterForKey(117)
 EndEvent
 
 Function OnEntityCreate(int entityID, Form[] itemsToWear)
@@ -201,6 +207,16 @@ Event OnKeyDown(int keyCode)
 		mySound.Play(Game.GetPlayer())
 		;Debug.Notification(myTopic)
 		;Game.GetPlayer().Say(myTopic)
+	ElseIf keyCode == 116
+		; steam-net Phase 0 spike: create a Steam lobby and start pumping callbacks.
+		Debug.Notification("F4MP: Steam hosting - invite a friend, then they press F6.")
+		F4MP.SteamHost()
+		StartTimer(0.1, steamPollTimerID)
+	ElseIf keyCode == 117
+		; steam-net Phase 0 spike: find & join a Steam-friend's lobby.
+		Debug.Notification("F4MP: Steam joining...")
+		F4MP.SteamJoin()
+		StartTimer(0.1, steamPollTimerID)
 	EndIf
 EndEvent
 
@@ -252,6 +268,10 @@ Event OnTimer(int aiTimerID)
 		; the receiving side kills its copy once the owner's value reaches 0.
 		SyncSharedNPCHealth()
 		StartTimer(0, npcSyncTimerID)
+	ElseIf aiTimerID == steamPollTimerID
+		; steam-net Phase 0 spike: drain Steam callbacks + inbound hello/ack at ~10Hz.
+		F4MP.SteamPoll()
+		StartTimer(0.1, steamPollTimerID)
 	EndIf
 EndEvent
 

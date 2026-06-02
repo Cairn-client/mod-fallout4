@@ -167,5 +167,20 @@ Phase 0 spike → transport shim. Both efforts live on this branch.
 
 - [x] Branch `steam-net` created.
 - [x] This design doc.
-- [ ] Phase 0 spike (Steamworks SDK + hello-peer).
+- [x] `master` merged into `steam-net` (stability fixes A2/A5/A6/C1/C4 now underneath the Steam work — see §8 ordering).
+- [~] **Phase 0 spike — code complete, compile+link verified; runtime round-trip pending.**
+  - Steamworks SDK 1.64 wired into `f4mp/f4mp.vcxproj` behind `F4MPSteam` (default **OFF**;
+    enable with `msbuild f4mp\f4mp.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir=<repo>\ /p:F4MPSteam=true`).
+    Vendored SDK path `steamworks_sdk_164\sdk` (override with `/p:SteamworksDir=...`).
+  - `f4mp/SteamSpike.{h,cpp}` — singleton: `Host()` (CreateLobby, friends-only), `Join()`
+    (RequestLobbyList tag filter → JoinLobby), `Poll()` (`SteamAPI_RunCallbacks` + drain
+    `ISteamNetworkingMessages`). Greets lobby members with "hello", replies "ack" — proves a
+    bidirectional round-trip. Accepts inbound sessions in `OnSessionRequest`. All `#ifdef F4MP_STEAM`.
+  - Papyrus natives `F4MP.SteamHost()`, `F4MP.SteamJoin()`, `F4MP.SteamPoll()` registered (also `#ifdef`-guarded).
+  - **Verified:** default `x64 Debug` build green (flag off, normal enet build unchanged); `/p:F4MPSteam=true`
+    build compiles + links `steam_api64.lib` → `f4mp.dll`.
+  - **Runtime test (needs two FO4 1.10.163 clients, the user's machine):** build with `/p:F4MPSteam=true`,
+    add `SteamHost`/`SteamJoin`/`SteamPoll` declarations to `F4MP.psc`, call `SteamHost()` on one client +
+    `SteamJoin()` on a Steam friend's client, and `SteamPoll()` on a repeating timer on both. Watch the
+    plugin console for `RECV "hello"` / `RECV "ack"` to confirm the relay works under FO4's App-ID.
 - [ ] Phases 1–4.

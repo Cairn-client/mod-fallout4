@@ -70,6 +70,13 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <!-- Steam Networking (steam-net branch). OFF by default so the normal enet/UDP
+       build is byte-for-byte unchanged. Enable with: msbuild ... /p:F4MPSteam=true
+       The Steamworks SDK is vendored locally (gitignored) at the path below. -->
+  <PropertyGroup Label="F4MPSteam">
+    <F4MPSteam Condition="'$(F4MPSteam)'==''">false</F4MPSteam>
+    <SteamworksDir Condition="'$(SteamworksDir)'==''">$(SolutionDir)steamworks_sdk_164\sdk</SteamworksDir>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
@@ -172,6 +179,19 @@ copy /Y "$(ProjectDir)scripts\F4MPQuest.psc" "$(FALLOUT4_PATH)\Data\Scripts\Sour
       <EnableUAC>false</EnableUAC>
     </Link>
   </ItemDefinitionGroup>
+  <!-- Steam Networking opt-in (steam-net). Placed AFTER the per-config groups so it
+       appends to (rather than gets overwritten by) their AdditionalIncludeDirectories,
+       which intentionally don't carry a %(...) inherit token. Inert unless /p:F4MPSteam=true. -->
+  <ItemDefinitionGroup Condition="'$(F4MPSteam)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>F4MP_STEAM;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(SteamworksDir)\public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>steam_api64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SteamworksDir)\redistributable_bin\win64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\common\common_vc11.vcxproj">
       <Project>{d4c128a1-73dc-4941-a453-ce55af239ba8}</Project>
@@ -212,6 +232,7 @@ copy /Y "$(ProjectDir)scripts\F4MPQuest.psc" "$(FALLOUT4_PATH)\Data\Scripts\Sour
     <ClCompile Include="f4mp.cpp" />
     <ClCompile Include="NPC.cpp" />
     <ClCompile Include="Player.cpp" />
+    <ClCompile Include="SteamSpike.cpp" />
     <ClCompile Include="TopicInfoIDs.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -225,6 +246,7 @@ copy /Y "$(ProjectDir)scripts\F4MPQuest.psc" "$(FALLOUT4_PATH)\Data\Scripts\Sour
     <ClInclude Include="common.h" />
     <ClInclude Include="NPC.h" />
     <ClInclude Include="Player.h" />
+    <ClInclude Include="SteamSpike.h" />
     <ClInclude Include="TopicInfoIDs.h" />
   </ItemGroup>
   <ItemGroup>

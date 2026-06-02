@@ -20,6 +20,16 @@
 #include <iterator>
 #include <shlobj.h>				// CSIDL_MYCODUMENTS
 
+#ifdef F4MP_STEAM
+#include "SteamSpike.h"
+
+// Phase 0 Steam spike Papyrus shims. Free functions (internal linkage) so the
+// Register lambda can reference them; only present when built /p:F4MPSteam=true.
+static void Papyrus_SteamHost(StaticFunctionTag*) { f4mp::SteamSpike::Get().Host(); }
+static void Papyrus_SteamJoin(StaticFunctionTag*) { f4mp::SteamSpike::Get().Join(); }
+static void Papyrus_SteamPoll(StaticFunctionTag*) { f4mp::SteamSpike::Get().Poll(); }
+#endif
+
 std::vector<std::unique_ptr<f4mp::F4MP>> f4mp::F4MP::instances;
 size_t f4mp::F4MP::activeInstance = 0, f4mp::F4MP::nextActiveInstance = 0;
 
@@ -125,6 +135,15 @@ bool f4mp::F4MP::Init(const F4SEInterface* f4se)
 			vm->RegisterFunction(new NativeFunction0<StaticFunctionTag, bool>("Disconnect", "F4MP", Disconnect, vm));
 			vm->RegisterFunction(new NativeFunction0<StaticFunctionTag, void>("Tick", "F4MP", Tick, vm));
 			vm->RegisterFunction(new NativeFunction0<StaticFunctionTag, void>("SyncWorld", "F4MP", SyncWorld, vm));
+
+#ifdef F4MP_STEAM
+			// Phase 0 Steam Networking spike (steam-net). Drive from Papyrus:
+			// F4MP.SteamHost() on one client, F4MP.SteamJoin() on the other, and
+			// F4MP.SteamPoll() on a repeating timer on both. See docs/STEAM_NETWORKING.md.
+			vm->RegisterFunction(new NativeFunction0<StaticFunctionTag, void>("SteamHost", "F4MP", Papyrus_SteamHost, vm));
+			vm->RegisterFunction(new NativeFunction0<StaticFunctionTag, void>("SteamJoin", "F4MP", Papyrus_SteamJoin, vm));
+			vm->RegisterFunction(new NativeFunction0<StaticFunctionTag, void>("SteamPoll", "F4MP", Papyrus_SteamPoll, vm));
+#endif
 
 			vm->RegisterFunction(new NativeFunction0<StaticFunctionTag, UInt32>("GetPlayerEntityID", "F4MP", GetPlayerEntityID, vm));
 			vm->RegisterFunction(new NativeFunction1<StaticFunctionTag, UInt32, TESObjectREFR*>("GetEntityID", "F4MP", GetEntityID, vm));

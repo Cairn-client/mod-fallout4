@@ -132,11 +132,28 @@ resulting health streams back via the NPC health sync.
 - Routed damage uses `InstanceData.GetAttackDamage` (base weapon damage), not the fully-resolved
   hit (armor/resistances/perks). Good enough for L1; revisit if balance matters.
 
-### 🟠 B2. Building / settlement sync is half-wired
-`SyncWorld` (`f4mp.cpp:1072`) scans the player's cell for static objects (formType 36) and
-collects `newBuildings`, and there are `SpawnBuilding`/`RemoveBuilding` message types + server
-relays, but the receive/apply side and the "transform-only update" HACK (`SpawnBuildingData.baseFormID == 0`)
-look unfinished. Settlement building is not reliably replicated.
+### 🟠 B2. Building / settlement sync — receive side hardened (2026-06-02)
+`SyncWorld` (`f4mp.cpp`) scans the player's cell for static objects (formType 36) and collects
+`newBuildings`; `SpawnBuilding`/`RemoveBuilding` message types + server relays exist. The
+receive/apply handlers were wired but crash-prone.
+
+**Done (2026-06-02, C++ only, build-verified, untested at runtime):** receive-side hardening.
+- `OnSpawnBuilding`: guard the base-form lookup (null on load-order mismatch) and the
+  `PlaceAtMe_Native` result (could return null → the old code dereferenced it via
+  `MoveTo`/`building->formID` and crashed the client). Also erase a stale `knownBuildings`
+  entry before overwriting a re-spawned `uniqueID`. The transform-only update path
+  (`baseFormID == 0`) now has a clear "drop if we have no local copy yet" comment.
+- `OnRemoveBuilding`: fixed a **use-after-free** — `building` is an iterator into
+  `self.buildings`, and the erase loop deleted that key from every instance (incl. self),
+  invalidating it before `building->second.formID` was read (UAF even with one instance).
+  Now caches the key + local formID into locals before the loop.
+
+**Still TODO (needs 2-client runtime):**
+- Transform updates only flow from the original placer: a receiver that moves a received
+  building broadcasts a key `(receiverPlayerID, receiverLocalFormID)` the original placer
+  can't match, so the move isn't echoed back. Needs a shared/canonical building ID.
+- Out-of-order delivery: a transform update arriving before its spawn is dropped (no buffering).
+- The build-detection cell scan still re-arms at 0s like the other timers (fold into A3).
 
 ### 🟡 B3. Dialogue / topic-info ("Speak") system is experimental
 Large blocks in `f4mp.cpp` (`Connect` topic-info registration, the `Tick` topic-info remainder

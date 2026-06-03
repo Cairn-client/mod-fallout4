@@ -856,18 +856,49 @@ void f4mp::F4MP::OnSpawnBuilding(librg_message* msg)
 		}
 	}
 
+	// A transform-only update (baseFormID == 0) for a building we have no local
+	// copy of yet: there's nothing to move. This happens when the original spawn
+	// was missed or arrived out of order. Drop it rather than placing a base-less
+	// placeholder.
 	if (data.baseFormID == 0)
 	{
 		return;
 	}
 
-	TESObjectREFR* building = PlaceAtMe_Native((*g_gameVM)->m_virtualMachine, 0, (TESObjectREFR**)g_player.GetPtr(), LookupFormByID(data.baseFormID), 1, true, false, false);
+	// B2: guard the base-form lookup. A load-order mismatch (the sender has a mod
+	// the receiver doesn't) yields a null form; placing from it would crash.
+	TESForm* baseForm = LookupFormByID(data.baseFormID);
+	if (!baseForm)
+	{
+		_ERROR("OnSpawnBuilding: base form %08X not found (load-order mismatch?)", data.baseFormID);
+		return;
+	}
+
+	// B2: PlaceAtMe can fail and return null (e.g. a non-placeable base form). The
+	// old code dereferenced the result unconditionally (MoveTo + building->formID)
+	// and would crash the client; guard it.
+	TESObjectREFR* building = PlaceAtMe_Native((*g_gameVM)->m_virtualMachine, 0, (TESObjectREFR**)g_player.GetPtr(), baseForm, 1, true, false, false);
+	if (!building)
+	{
+		_ERROR("OnSpawnBuilding: PlaceAtMe failed for base form %08X", data.baseFormID);
+		return;
+	}
+
 	MoveTo(building, data.position, data.angles);
 
 	printf("building spawned: %llx %f %f %f\n", uniqueID, data.position.x, data.position.y, data.position.z);
 
 	for (auto& instance : instances)
 	{
+		// If this uniqueID was somehow already tracked, drop the stale local formID
+		// from knownBuildings before overwriting, so the cell scan doesn't keep a
+		// dangling entry that suppresses a legitimate future re-placement.
+		auto existing = instance->buildings.find(uniqueID);
+		if (existing != instance->buildings.end())
+		{
+			instance->knownBuildings.erase(existing->second.formID);
+		}
+
 		instance->buildings[uniqueID] = { building->formID, data.position, data.angles };
 		instance->knownBuildings.insert(building->formID);
 	}
@@ -883,7 +914,15 @@ void f4mp::F4MP::OnRemoveBuilding(librg_message* msg)
 	auto building = self.buildings.find(data.uniqueFormID);
 	if (building != self.buildings.end())
 	{
-		TESObjectREFR* ref = DYNAMIC_CAST(LookupFormByID(building->second.formID), TESForm, TESObjectREFR);
+		// B2: cache the key + local formID BEFORE the erase loop. `building` is an
+		// iterator into self.buildings, and the loop erases that same key from
+		// every instance (including self), which invalidates the iterator — the
+		// old code then read building->second.formID from the dangling iterator
+		// (a use-after-free even with a single instance).
+		const UInt64 uniqueID = building->first;
+		const UInt32 localFormID = building->second.formID;
+
+		TESObjectREFR* ref = DYNAMIC_CAST(LookupFormByID(localFormID), TESForm, TESObjectREFR);
 		if (ref)
 		{
 			VMArray<VMVariable> args;
@@ -895,8 +934,8 @@ void f4mp::F4MP::OnRemoveBuilding(librg_message* msg)
 
 		for (auto& instance : instances)
 		{
-			instance->buildings.erase(building->first);
-			instance->knownBuildings.erase(building->second.formID);
+			instance->buildings.erase(uniqueID);
+			instance->knownBuildings.erase(localFormID);
 		}
 	}
 }

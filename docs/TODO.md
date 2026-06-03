@@ -163,10 +163,15 @@ load orders.
 Now compares `== 0`, so `GetAction` returns the action whose name actually matches instead of
 the first non-matching one. Compiles.
 
-### 🟡 C2. Hardcoded magic values
-Server spawn point `(886, -426, -1550)` (`Server.h:45`); connect keybind F1=112 and target
-`localhost:7779` (`F4MPQuest.psc:135-140`); runtime guard `RUNTIME_VERSION_1_10_163`
-(`main.cpp:28`). Fine for a prototype; should be config-driven before wider testing.
+### 🟠 C2. Hardcoded magic values — connect target now config-driven (2026-06-02)
+- ✅ **Connect port** is now read from `config.txt` (line 2; defaults 7779, validated). The
+  F1 keybind calls `Connect("", 0)` so config drives both host **and** port; an explicit
+  positive port from any caller still wins (`f4mp.cpp` LoadConfig + Connect, `client.h` Config,
+  `F4MPQuest.psc`). Plugin built + `F4MPQuest.pex` recompiled clean. Lets a user reach a friend
+  on a non-default port without recompiling. README + RELEASE_README document the config format.
+- ⏳ Remaining hardcoded values (lower priority): server spawn point `(886,-426,-1550)`
+  (`Server.h:45`), the F1=112 keybind code itself, runtime guard `RUNTIME_VERSION_1_10_163`
+  (`main.cpp:28`).
 
 ### 🟡 C3. Multi-instance ("split client") machinery is complex and fragile
 `activeInstance`/`nextActiveInstance` + `instances[]` vector (`f4mp.cpp:22-34`, `1057-1069`),

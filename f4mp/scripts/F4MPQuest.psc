@@ -176,7 +176,9 @@ Event OnKeyDown(int keyCode)
 		RegisterForExternalEvent("OnTopicInfoRegister", "OnTopicInfoRegister")
 		RegisterForExternalEvent("OnAdditionalTopicInfoRegister", "RegisterTopicInfos")
 		
-		Connect("", 7779)
+		; Pass 0 so the native uses config.txt's port (default 7779). Edit
+		; %MyDocuments%\My Games\Fallout4\F4MP\config.txt to set a friend's IP + port.
+		Connect("", 0)
 
 		playerIDs = new int[0]
 		players = new F4MPPlayer[0]		

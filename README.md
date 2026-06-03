@@ -188,6 +188,14 @@ Anyone on your local network can connect. To play over the internet, forward por
 (both **TCP & UDP**); joiners put your public IP in their `config.txt`
 (`Documents\My Games\Fallout4\F4MP\config.txt`).
 
+`config.txt` is read by the client at load: **line 1** = host address (IP/hostname; blank = `localhost`),
+**line 2** = port (optional, defaults to `7779`). Pressing **F1** in-game connects to whatever it specifies,
+so a non-default host port no longer needs a recompile — just edit the file. Example:
+```
+203.0.113.7
+7779
+```
+
 ## Running the game
 
 Launch Fallout 4 via **`f4se_loader.exe`** (not the normal launcher) and load a save. Then connect one of two ways:

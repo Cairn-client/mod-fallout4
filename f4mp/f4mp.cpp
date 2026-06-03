@@ -89,12 +89,23 @@ f4mp::F4MP::F4MP() : ctx{}, port(0), handle(kPluginHandle_Invalid), messaging(nu
 	if (!configFile)
 	{
 		std::ofstream newConfigFile(path);
-		newConfigFile << "localhost" << std::endl;
+		// Self-documenting default so a user who opens config.txt knows the format:
+		// first token = host address (a friend's IP/hostname), second = port.
+		newConfigFile << "localhost" << std::endl << 7779 << std::endl;
 
 		configFile = std::ifstream(path);
 	}
 
 	configFile >> config.hostAddress;
+
+	// Optional second token = port. A failed extraction (missing/garbage) leaves
+	// the stream's target untouched, so read into a temp and only accept a sane
+	// value; otherwise keep the 7779 default.
+	int filePort = 0;
+	if (configFile >> filePort && filePort > 0 && filePort <= 65535)
+	{
+		config.port = filePort;
+	}
 
 	// Don't trust the file blindly: an empty/garbage config.txt would leave the
 	// host address blank and the connect would fail with no clear reason. Fall
@@ -985,7 +996,10 @@ bool f4mp::F4MP::Connect(StaticFunctionTag* base, Actor* player, TESNPC* playerA
 	self.player->OnConnect(player, playerActorBase);
 
 	self.address = strlen(address.c_str()) > 0 ? address.c_str() : self.config.hostAddress;
-	self.port = port;
+	// A non-positive port from Papyrus means "use whatever config.txt specifies"
+	// (default 7779). A positive port from the caller still wins, so explicit
+	// callers keep working unchanged.
+	self.port = port > 0 ? port : self.config.port;
 
 	if (librg_network_start(&self.ctx, { self.port, const_cast<char*>(self.address.c_str()) }))
 	{

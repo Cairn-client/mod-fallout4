@@ -122,5 +122,9 @@ namespace f4mp
 	struct Config
 	{
 		std::string hostAddress;
+		// C2: connect port is now config-driven too, so a user can reach a friend
+		// hosting on a non-default port without editing/recompiling Papyrus.
+		// Optional second token in config.txt; defaults to 7779 when absent/invalid.
+		int port = 7779;
 	};
 }

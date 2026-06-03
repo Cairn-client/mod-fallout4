@@ -58,9 +58,14 @@ WHAT THIS IS
   2. Load a save. A small console window opens showing F4MP status.
   3. Direct-IP co-op:
         - One player runs  f4mp_server.exe  to host (default port 7779).
-        - Each other player sets the host's address in  config.txt
-          (blank = localhost), then presses  F1  in-game to connect.
-        - The console shows connection status.
+        - Each other player sets the host's address in  config.txt  here:
+              %USERPROFILE%\Documents\My Games\Fallout4\F4MP\config.txt
+          Line 1 = host's IP (or hostname); blank/localhost = same PC.
+          Line 2 = port (optional; defaults to 7779). Example config.txt:
+              203.0.113.7
+              7779
+        - Then press  F1  in-game to connect. The console shows status.
+        - The host must forward/allow that port (TCP + UDP) for internet play.
 
 ------------------------------------------------------------
  UNINSTALL

@@ -337,5 +337,21 @@ namespace f4mp
 		{
 			return &ctx;
 		}
+
+		// A7: count the currently connected players (client-controlled entities),
+		// the same filter OnSyncEntity uses to walk live clients.
+		u32 PlayerCount()
+		{
+			// The iteratex macro expands `ctx->...` without parenthesizing its
+			// argument, so a local pointer (not `&ctx`) is required here.
+			librg_ctx* c = &ctx;
+			u32 count = 0;
+			librg_entity_iteratex(c, LIBRG_ENTITY_ALIVE | LIBRG_ENTITY_CLIENT, id,
+				{
+					(void)id;
+					count++;
+				});
+			return count;
+		}
 	};
 }

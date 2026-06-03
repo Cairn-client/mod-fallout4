@@ -5,8 +5,23 @@
 
 #include <iostream>
 #include <fstream>
+#include <csignal>
+#include <chrono>
 
 f4mp::Server* f4mp::Server::instance = nullptr;
+
+// A7: graceful shutdown. The handler must do almost nothing (it runs in a
+// signal/console context), so it only flips this flag; the main loop sees it,
+// breaks, and tears the server down cleanly on the normal thread.
+namespace
+{
+	volatile std::sig_atomic_t g_running = 1;
+
+	void HandleShutdownSignal(int)
+	{
+		g_running = 0;
+	}
+}
 
 int main()
 {
@@ -49,10 +64,41 @@ int main()
 
 	server->Start();
 
-	while (true)
+	// A7: trap Ctrl-C / kill so we can stop the network cleanly instead of
+	// being hard-killed (which leaves clients hanging until their own timeout).
+	std::signal(SIGINT, HandleShutdownSignal);
+	std::signal(SIGTERM, HandleShutdownSignal);
+
+	// A7: periodic "N players connected" status line so the operator can see
+	// liveness without grepping the per-event log spam.
+	auto lastStatus = std::chrono::steady_clock::now();
+	u32 lastReported = (u32)-1;
+	const auto statusInterval = std::chrono::seconds(15);
+
+	while (g_running)
 	{
 		server->Tick();
+
+		auto now = std::chrono::steady_clock::now();
+		if (now - lastStatus >= statusInterval)
+		{
+			lastStatus = now;
+			u32 players = server->PlayerCount();
+			if (players != lastReported)
+			{
+				lastReported = players;
+				std::cout << "[status] " << players << " player(s) connected" << std::endl;
+			}
+		}
 	}
+
+	std::cout << std::endl << "shutting down; disconnecting clients..." << std::endl;
+
+	// ~Server() calls librg_network_stop + librg_free, which disconnects peers
+	// cleanly so clients see a real disconnect rather than a half-open link.
+	delete server;
+
+	std::cout << "server stopped." << std::endl;
 
 	return 0;
 }

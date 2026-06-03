@@ -75,10 +75,16 @@ Server clamps an invalid/missing port back to 7779 with a warning and logs the b
 (`address:port`, or "all interfaces"). Client defaults a blank `config.txt` host to `localhost`.
 Turns silent bind/connect failures into clear messages. Compiles. Not runtime-tested.
 
-### 🟡 A7. No graceful server shutdown / no connection logging summary
-`f4mp_server/main.cpp:40` is `while(true){ Tick(); }` with no signal handling. Can't drain
-clients or save state on exit. Also no periodic "N players connected" status line.
-- **Fix:** trap Ctrl-C, broadcast a shutdown notice, `librg_network_stop` cleanly.
+### ✅ A7. Graceful server shutdown + connection logging — DONE (2026-06-02)
+`f4mp_server/main.cpp` now traps `SIGINT`/`SIGTERM` (handler flips a `g_running`
+flag; the `while(true)` became `while(g_running)`). On exit it `delete server`s so
+`~Server()` runs `librg_network_stop`/`librg_free` and clients see a clean disconnect
+instead of a half-open link. Added `Server::PlayerCount()` (iterates
+`LIBRG_ENTITY_ALIVE|LIBRG_ENTITY_CLIENT`) and a 15s periodic
+`[status] N player(s) connected` line (printed only when the count changes).
+Build-verified Debug x64 + boot-tested (binds, prints status, stable). Commit `49da092`.
+- Not done (needs client + runtime): broadcasting an in-game shutdown *notice* to
+  clients requires a new MessageType + client/Papyrus handling — deferred.
 
 ---
 

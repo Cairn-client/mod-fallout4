@@ -179,8 +179,9 @@ the plugin's post-build step auto-copy `f4mp.dll` into `Data\F4SE\Plugins\`.
 # build once (or use deploy.ps1 -BuildServer)
 msbuild f4mp_server\f4mp_server.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir=<repo-root>\
 ```
-Create `server_config.txt` next to `f4mp_server.exe` with the bind address (usually
-`localhost`), then run:
+Create `server_config.txt` next to `f4mp_server.exe`: **line 1** = bind address (usually
+`localhost`), **line 2** = port (default `7779`), **line 3** (optional) = player spawn point
+`x y z` (defaults to `886 -426 -1550`). Then run:
 ```
 f4mp_server.exe
 ```

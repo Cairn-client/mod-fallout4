@@ -5,6 +5,10 @@ int updateTimerID = 20
 int npcSyncTimerID = 30
 int steamPollTimerID = 40   ; steam-net Phase 0 spike: repeatedly pumps F4MP.SteamPoll()
 
+; C2: connect keybind in one named place instead of a bare 112 literal scattered
+; across OnInit + OnKeyDown. 112 = F1 (DirectInput scancode). Change here to rebind.
+int connectKeyCode = 112
+
 Actor Property playerRef Auto
 
 ActorBase Property f4mpPlayerBase Auto
@@ -22,7 +26,7 @@ F4MPPlayer[] players
 bool topicInfosRegistered = false
 
 Event OnInit()
-	RegisterForKey(112)
+	RegisterForKey(connectKeyCode)
 	; steam-net Phase 0 spike keybinds: F5 = SteamHost, F6 = SteamJoin.
 	; (F2/F3 = 113/114 are already used by the enet client toggle / debug sound,
 	;  so the spike uses the next free keys.)
@@ -172,7 +176,7 @@ Sound Property mySound Auto
 Topic Property myTopic Auto
 
 Event OnKeyDown(int keyCode)
-	If keyCode == 112
+	If keyCode == connectKeyCode
 		RegisterForExternalEvent("OnTopicInfoRegister", "OnTopicInfoRegister")
 		RegisterForExternalEvent("OnAdditionalTopicInfoRegister", "RegisterTopicInfos")
 		

@@ -163,15 +163,23 @@ load orders.
 Now compares `== 0`, so `GetAction` returns the action whose name actually matches instead of
 the first non-matching one. Compiles.
 
-### 🟠 C2. Hardcoded magic values — connect target now config-driven (2026-06-02)
+### ✅ C2. Hardcoded magic values — DONE (2026-06-02)
 - ✅ **Connect port** is now read from `config.txt` (line 2; defaults 7779, validated). The
   F1 keybind calls `Connect("", 0)` so config drives both host **and** port; an explicit
   positive port from any caller still wins (`f4mp.cpp` LoadConfig + Connect, `client.h` Config,
-  `F4MPQuest.psc`). Plugin built + `F4MPQuest.pex` recompiled clean. Lets a user reach a friend
-  on a non-default port without recompiling. README + RELEASE_README document the config format.
-- ⏳ Remaining hardcoded values (lower priority): server spawn point `(886,-426,-1550)`
-  (`Server.h:45`), the F1=112 keybind code itself, runtime guard `RUNTIME_VERSION_1_10_163`
-  (`main.cpp:28`).
+  `F4MPQuest.psc`). Lets a user reach a friend on a non-default port without recompiling.
+  README + RELEASE_README document the config format.
+- ✅ **Server spawn point** is config-driven: optional `x y z` line after address+port in
+  `server_config.txt` (`Server.h` ctor + member; `f4mp_server/main.cpp` parse). Defaults to the
+  original `(886,-426,-1550)` when absent/malformed (all-or-nothing parse). Server logs the spawn
+  point at boot. Boot-tested: `100.5 -200.25 -300.75` read back correctly.
+- ✅ **Connect keybind** de-magicked: `F4MPQuest.psc` now has a single named `connectKeyCode = 112`
+  (F1) used in both `OnInit` `RegisterForKey` and `OnKeyDown`. (Full file-config for a keybind
+  would need a new native + can't be runtime-tested; a single named source is the sensible level.)
+- ✅ **Runtime guard `RUNTIME_VERSION_1_10_163`** (`f4mp/main.cpp`): deliberately left a fixed
+  compile-time ABI gate — the DLL is built against 1.10.163 offsets/RTTI, so loading on another
+  runtime would crash, not "work with a config tweak". Added a comment documenting the decision.
+- Build-verified: server + plugin (Debug x64) and `F4MPQuest.pex` recompiled clean (CK 2.8.0.4).
 
 ### 🟡 C3. Multi-instance ("split client") machinery is complex and fragile
 `activeInstance`/`nextActiveInstance` + `instances[]` vector (`f4mp.cpp:22-34`, `1057-1069`),

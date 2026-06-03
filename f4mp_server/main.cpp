@@ -30,11 +30,24 @@ int main()
 	std::string address;
 	i32 port = 7779;
 
+	// C2: spawn point is config-driven (optional x y z after address+port).
+	// Defaults to the original hardcoded location when absent/malformed.
+	zpl_vec3 spawnPoint{ 886.134460f, -426.953460f, -1550.012817f };
+
 	std::ifstream config(configFilePath);
 	if (config)
 	{
 		config >> address;
 		config >> port;
+
+		// Optional spawn override: only accept it if all three coords parse,
+		// otherwise keep the default (a partial line shouldn't half-apply).
+		zpl_vec3 fileSpawn;
+		if (config >> fileSpawn.x >> fileSpawn.y >> fileSpawn.z)
+		{
+			spawnPoint = fileSpawn;
+		}
+
 		config.close();
 	}
 	else
@@ -43,7 +56,9 @@ int main()
 		std::cin >> address;
 
 		std::ofstream file(configFilePath);
-		file << address << std::endl << port;
+		// Write the spawn defaults too, so the file documents the full format.
+		file << address << std::endl << port << std::endl
+			<< spawnPoint.x << " " << spawnPoint.y << " " << spawnPoint.z;
 
 		std::cout << std::endl;
 	}
@@ -59,8 +74,9 @@ int main()
 	// Empty address is fine: librg treats "" / "localhost" as bind-to-all.
 
 	std::cout << "binding " << (address.empty() ? "(all interfaces)" : address) << ":" << port << std::endl;
+	std::cout << "player spawn point: " << spawnPoint.x << " " << spawnPoint.y << " " << spawnPoint.z << std::endl;
 
-    f4mp::Server* server = new f4mp::Server(address, port);
+    f4mp::Server* server = new f4mp::Server(address, port, spawnPoint);
 
 	server->Start();
 

@@ -25,6 +25,13 @@ extern "C" {
 
 			return false;
 		}
+		// C2: this is intentionally a fixed compile-time gate, NOT config-driven.
+		// The plugin is compiled against F4SE 0.6.23 / Fallout 4 1.10.163 memory
+		// layout (hardcoded struct offsets, RTTI, game-function addresses). Loading
+		// it against any other runtime would not "work with a config tweak" -- it
+		// would dereference wrong offsets and crash. Refusing to load on a mismatch
+		// is the safe behavior. To support another game version, rebuild against
+		// that version's F4SE, then change this constant to match.
 		else if (f4se->runtimeVersion != RUNTIME_VERSION_1_10_163)
 		{
 			_MESSAGE("unsupported runtime version %08X", f4se->runtimeVersion);

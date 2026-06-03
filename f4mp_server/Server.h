@@ -20,6 +20,11 @@ namespace f4mp
 		std::string address;
 		i32 port;
 
+		// C2: where newly-connected players are placed. Was hardcoded in
+		// on_connect_accepted; now seeded from server_config.txt (optional x/y/z
+		// after address+port), defaulting to the original Sanctuary-ish spot.
+		zpl_vec3 spawnPoint;
+
 		librg_ctx ctx;
 
 		std::unordered_map<u32, u32> entityIDs;
@@ -42,7 +47,9 @@ namespace f4mp
 			librg_log("on_connect_accepted %x\n", event->peer);
 			librg_entity* blob = event->entity;
 
-			blob->position = zpl_vec3{ 886.134460f, -426.953460f, -1550.012817f };
+			Server* self = (Server*)event->ctx->user_data;
+
+			blob->position = self->spawnPoint;
 
 			librg_log("spawning player %u at: %f %f %f\n",
 				event->entity->id,
@@ -50,8 +57,6 @@ namespace f4mp
 				blob->position.y,
 				blob->position.z
 			);
-
-			Server* self = (Server*)event->ctx->user_data;
 
 			enet_peer_timeout(event->peer, UINT32_MAX, UINT32_MAX, UINT32_MAX);
 			librg_entity_control_set(event->ctx, event->entity->id, event->peer);
@@ -267,7 +272,9 @@ namespace f4mp
 		}
 
 	public:
-		Server(const std::string& address, i32 port) : address(address), port(port), ctx{}
+		Server(const std::string& address, i32 port,
+			const zpl_vec3& spawnPoint = zpl_vec3{ 886.134460f, -426.953460f, -1550.012817f })
+			: address(address), port(port), spawnPoint(spawnPoint), ctx{}
 		{
 			instance = this;
 

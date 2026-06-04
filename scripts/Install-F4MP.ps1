@@ -122,8 +122,20 @@ function Enable-Plugin {
     } else { Good "f4mp.esp already enabled in plugins.txt" }
 }
 
+function Get-RealDocuments {
+    # Fallout 4 reads its config from the Documents KNOWN folder, which OneDrive
+    # often redirects away from %USERPROFILE%\Documents. Resolve the real path so
+    # the ini lands where the game actually looks (else loose files never load).
+    $docs = Join-Path $env:USERPROFILE 'Documents'
+    try {
+        $p = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -ErrorAction Stop).Personal
+        if ($p) { $docs = [Environment]::ExpandEnvironmentVariables($p).TrimEnd('\') }
+    } catch {}
+    return $docs
+}
+
 function Set-LooseFilesIni {
-    $ini = Join-Path $env:USERPROFILE 'Documents\My Games\Fallout4\Fallout4Custom.ini'
+    $ini = Join-Path (Get-RealDocuments) 'My Games\Fallout4\Fallout4Custom.ini'
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ini) | Out-Null
     $content = ''
     if (Test-Path $ini) { $content = Get-Content $ini -Raw }

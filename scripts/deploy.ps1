@@ -264,7 +264,15 @@ function Enable-Plugin {
 
 # Allow loose files (the .pex scripts) to load.
 function Set-LooseFilesIni {
-    $ini = Join-Path $env:USERPROFILE 'Documents\My Games\Fallout4\Fallout4Custom.ini'
+    # FO4 reads config from the Documents KNOWN folder, which OneDrive often
+    # redirects off %USERPROFILE%\Documents. Resolve the real path so the ini
+    # lands where the game looks (else loose .pex scripts never load).
+    $docs = Join-Path $env:USERPROFILE 'Documents'
+    try {
+        $p = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -ErrorAction Stop).Personal
+        if ($p) { $docs = [Environment]::ExpandEnvironmentVariables($p).TrimEnd('\') }
+    } catch {}
+    $ini = Join-Path $docs 'My Games\Fallout4\Fallout4Custom.ini'
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ini) | Out-Null
     $content = ''
     if (Test-Path $ini) { $content = Get-Content $ini -Raw }

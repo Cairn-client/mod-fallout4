@@ -55,6 +55,17 @@ if (-not $Fallout4Path -or -not (Test-Path (Join-Path $Fallout4Path 'Fallout4.ex
 $Fallout4Path = $Fallout4Path.TrimEnd('\')
 $data = Join-Path $Fallout4Path 'Data'
 
+# Resolve the REAL "Documents" known folder (OneDrive often redirects it away
+# from %USERPROFILE%\Documents). The game uses the known-folder path; the
+# installer used the literal path -- if they differ, the game never sees the ini.
+$litDocs = Join-Path $env:USERPROFILE 'Documents'
+$realDocs = $litDocs
+try {
+    $p = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -ErrorAction Stop).Personal
+    if ($p) { $realDocs = [Environment]::ExpandEnvironmentVariables($p).TrimEnd('\') }
+} catch {}
+$redirected = ($realDocs -and ($realDocs -ne $litDocs.TrimEnd('\')))
+
 Sec "Fallout 4 install"
 Write-Host "Path: $Fallout4Path"
 $ver = (Get-Item (Join-Path $Fallout4Path 'Fallout4.exe')).VersionInfo.ProductVersion
@@ -92,13 +103,28 @@ else {
     }
 }
 
-Sec "Loose-files ini  (Documents\My Games\Fallout4\Fallout4Custom.ini)"
-$ini = Join-Path $env:USERPROFILE 'Documents\My Games\Fallout4\Fallout4Custom.ini'
-if (-not (Test-Path $ini)) { WARN "No Fallout4Custom.ini -- loose files/scripts won't load." }
-else {
-    $c = Get-Content $ini -Raw
-    if ($c -match '(?i)bInvalidateOlderFiles\s*=\s*1') { OK "bInvalidateOlderFiles=1 set" } else { BAD "bInvalidateOlderFiles=1 MISSING" }
-    if ($c -match '(?im)^\s*sResourceDataDirsFinal\s*=') { OK "sResourceDataDirsFinal present" } else { WARN "sResourceDataDirsFinal line missing" }
+Sec "Documents folder (OneDrive redirection check)"
+Write-Host "Literal %USERPROFILE%\Documents : $litDocs"
+Write-Host "Real (known-folder) Documents   : $realDocs"
+if ($redirected) {
+    BAD "Documents is REDIRECTED (likely OneDrive). The game reads/writes the REAL path;"
+    BAD "  the installer wrote ini/log to the LITERAL path -> game never sees the loose-files"
+    BAD "  ini and F4SE's log looks 'missing'. THIS can blank the menu. Fix below."
+} else { OK "Documents not redirected (game and installer agree on the path)." }
+
+Sec "Loose-files ini  (Fallout4Custom.ini)"
+$iniReal = Join-Path $realDocs 'My Games\Fallout4\Fallout4Custom.ini'
+$iniLit  = Join-Path $litDocs  'My Games\Fallout4\Fallout4Custom.ini'
+# The path the GAME actually uses is the real (known-folder) one.
+if (Test-Path $iniReal) {
+    $inv = (Get-Content $iniReal -Raw) -match '(?i)bInvalidateOlderFiles\s*=\s*1'
+    if ($inv) { OK "REAL ini has bInvalidateOlderFiles=1  ($iniReal)" }
+    else { BAD "REAL ini missing bInvalidateOlderFiles=1 -> loose F4MP scripts won't load  ($iniReal)" }
+} else {
+    BAD "No Fallout4Custom.ini at the REAL path the game uses: $iniReal"
+}
+if ($redirected -and (Test-Path $iniLit)) {
+    WARN "A stale copy exists at the literal path ($iniLit) -- the game IGNORES it."
 }
 
 Sec "F4MP files in Data"
@@ -117,12 +143,23 @@ if (Test-Path $dll) {
     } catch {}
 } else { BAD "f4mp.dll MISSING from Data\F4SE\Plugins" }
 
-Sec "F4SE log  (did F4SE load or skip f4mp.dll?)"
-$log = Join-Path $env:USERPROFILE 'Documents\My Games\Fallout4\F4SE\f4se.log'
-if (Test-Path $log) {
-    Write-Host "Log: $log"
+Sec "F4SE log  (did F4SE actually run?)"
+$logCandidates = @(
+    (Join-Path $realDocs 'My Games\Fallout4\F4SE\f4se.log'),
+    (Join-Path $litDocs  'My Games\Fallout4\F4SE\f4se.log'),
+    (Join-Path $Fallout4Path 'f4se.log')
+) | Select-Object -Unique
+$log = $logCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($log) {
+    OK "F4SE log found -> F4SE IS injecting. Log: $log"
     Get-Content $log | Where-Object { $_ -match '(?i)plugin|f4mp|version|loaded|fail|error|unable' } | Select-Object -Last 25 | ForEach-Object { Write-Host "  $_" }
-} else { WARN "No f4se.log yet (launch once via f4se_loader.exe to generate it)." }
+} else {
+    BAD "NO f4se.log anywhere -> F4SE is NOT injecting on this PC. The game is booting"
+    BAD "  WITHOUT the script extender, which breaks F4MP's menu scripts (no buttons)."
+    Write-Host "  Looked in:"; $logCandidates | ForEach-Object { Write-Host "    $_" }
+    Write-Host "  Causes: (1) launching Fallout4.exe/Steam Play instead of f4se_loader.exe," -ForegroundColor Gray
+    Write-Host "          (2) antivirus/Defender blocking f4se_loader.exe injection or its log write." -ForegroundColor Gray
+}
 
 Sec "steam_api64.dll  (old Steam-spike builds swapped this)"
 if (Test-Path (Join-Path $Fallout4Path 'steam_api64.dll.orig')) {

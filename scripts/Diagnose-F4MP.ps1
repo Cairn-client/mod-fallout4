@@ -15,10 +15,17 @@
     - F4SE's own log lines about loading/skipping f4mp.dll
     - whether steam_api64.dll was swapped by an old Steam-spike build
 
+.PARAMETER Fix
+  Not read-only: writes the [Archive] loose-files block (bInvalidateOlderFiles=1)
+  to the REAL Documents ini the game actually uses. This is the one repair the
+  diagnostic can safely make for the "no main-menu buttons" case.
+
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File .\Diagnose-F4MP.ps1
+  powershell -ExecutionPolicy Bypass -File .\Diagnose-F4MP.ps1          # report only
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File .\Diagnose-F4MP.ps1 -Fix     # report + repair the ini
 #>
-param([string]$Fallout4Path)
+param([string]$Fallout4Path, [switch]$Fix)
 
 function Sec($m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
 function OK($m) { Write-Host "[ OK ] $m" -ForegroundColor Green }
@@ -116,15 +123,28 @@ Sec "Loose-files ini  (Fallout4Custom.ini)"
 $iniReal = Join-Path $realDocs 'My Games\Fallout4\Fallout4Custom.ini'
 $iniLit  = Join-Path $litDocs  'My Games\Fallout4\Fallout4Custom.ini'
 # The path the GAME actually uses is the real (known-folder) one.
-if (Test-Path $iniReal) {
-    $inv = (Get-Content $iniReal -Raw) -match '(?i)bInvalidateOlderFiles\s*=\s*1'
-    if ($inv) { OK "REAL ini has bInvalidateOlderFiles=1  ($iniReal)" }
-    else { BAD "REAL ini missing bInvalidateOlderFiles=1 -> loose F4MP scripts won't load  ($iniReal)" }
-} else {
-    BAD "No Fallout4Custom.ini at the REAL path the game uses: $iniReal"
-}
+$iniOk = (Test-Path $iniReal) -and ((Get-Content $iniReal -Raw) -match '(?i)bInvalidateOlderFiles\s*=\s*1')
+if ($iniOk) { OK "REAL ini has bInvalidateOlderFiles=1  ($iniReal)" }
+elseif (Test-Path $iniReal) { BAD "REAL ini missing bInvalidateOlderFiles=1 -> loose F4MP scripts won't load  ($iniReal)" }
+else { BAD "No Fallout4Custom.ini at the REAL path the game uses: $iniReal" }
 if ($redirected -and (Test-Path $iniLit)) {
     WARN "A stale copy exists at the literal path ($iniLit) -- the game IGNORES it."
+}
+if (-not $iniOk) {
+    if ($Fix) {
+        $content = if (Test-Path $iniReal) { Get-Content $iniReal -Raw } else { '' }
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $iniReal) | Out-Null
+        if ($content -notmatch '(?im)^\s*\[Archive\]') {
+            if ($content -and -not $content.EndsWith("`n")) { $content += "`r`n" }
+            $content += "[Archive]`r`nbInvalidateOlderFiles=1`r`nsResourceDataDirsFinal=`r`n"
+        } elseif ($content -notmatch '(?i)bInvalidateOlderFiles\s*=\s*1') {
+            $content = $content -replace '(?im)(\[Archive\]\s*?\r?\n)', "`$1bInvalidateOlderFiles=1`r`nsResourceDataDirsFinal=`r`n"
+        }
+        Set-Content -Path $iniReal -Value $content -Encoding ASCII
+        OK "FIXED: wrote bInvalidateOlderFiles=1 to $iniReal  -> relaunch via f4se_loader.exe"
+    } else {
+        WARN "Re-run with  -Fix  to repair this automatically:  .\Diagnose-F4MP.ps1 -Fix"
+    }
 }
 
 Sec "F4MP files in Data"

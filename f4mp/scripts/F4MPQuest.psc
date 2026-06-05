@@ -5,6 +5,16 @@ int updateTimerID = 20
 int npcSyncTimerID = 30
 int steamPollTimerID = 40   ; steam-net Phase 0 spike: repeatedly pumps F4MP.SteamPoll()
 
+; Phase 1 stabilization (2026-06-04): these three timers used to re-arm with
+; StartTimer(0), which on the Papyrus VM means "fire as fast as the script budget
+; allows" — three uncapped loops that flooded the link and caused the horrendous
+; lag/desync seen at the first 2-client runtime. Cap them at sane rates instead.
+; (Phase 2 / TODO A3 will move the network pump off the Papyrus VM entirely so it
+; no longer starves during loading screens; until then these caps are the fix.)
+float tickInterval = 0.033      ; ~30 Hz network pump + world sync (keeps movement smooth)
+float updateInterval = 0.1      ; ~10 Hz local-player health push (cheap; needn't be fast)
+float npcSyncInterval = 0.25    ; ~4 Hz shared-NPC health cell scan (expensive; keep low)
+
 ; C2: connect keybind in one named place instead of a bare 112 literal scattered
 ; across OnInit + OnKeyDown. 112 = F1 (DirectInput scancode). Change here to rebind.
 int connectKeyCode = 112
@@ -164,9 +174,9 @@ bool Function Connect(string address, int port)
 	; ignored the result, so a failed connect left timers ticking a dead context.
 	bool connected = F4MP.Connect(client, clientActorBase, address, port)
 	If connected
-		StartTimer(0, tickTimerID)
-		StartTimer(0, updateTimerID)
-		StartTimer(0, npcSyncTimerID)
+		StartTimer(tickInterval, tickTimerID)
+		StartTimer(updateInterval, updateTimerID)
+		StartTimer(npcSyncInterval, npcSyncTimerID)
 	EndIf
 
 	return connected
@@ -253,7 +263,7 @@ EndEvent
 Event OnTimer(int aiTimerID)
 	If aiTimerID == tickTimerID
 		F4MP.Tick()
-		StartTimer(0, tickTimerID)
+		StartTimer(tickInterval, tickTimerID)
 	ElseIf aiTimerID == updateTimerID
 		;; ***************************************
 		;If chosenActor != None
@@ -266,14 +276,14 @@ Event OnTimer(int aiTimerID)
 		If F4MP.IsEntityValid(playerEntityID)
 			F4MP.SetEntVarNum(playerEntityID, "health", playerRef.GetValuePercentage(healthAV))
 		EndIf
-		StartTimer(0, updateTimerID)
+		StartTimer(updateInterval, updateTimerID)
 	ElseIf aiTimerID == npcSyncTimerID
 		; Feed every shared enemy's current health fraction into its F4MP entity.
 		; Only the client that owns (controls) a given NPC actually streams this
 		; value out; on everyone else SetEntVarNum is a harmless local write, and
 		; the receiving side kills its copy once the owner's value reaches 0.
 		SyncSharedNPCHealth()
-		StartTimer(0, npcSyncTimerID)
+		StartTimer(npcSyncInterval, npcSyncTimerID)
 	ElseIf aiTimerID == steamPollTimerID
 		; steam-net Phase 0 spike: drain Steam callbacks + inbound hello/ack at ~10Hz.
 		F4MP.SteamPoll()

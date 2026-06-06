@@ -220,7 +220,16 @@ namespace f4mp
 					return;
 				}
 				u32 callerID = caller->GetEntityID();
-			float minDist = zpl_vec3_mag2(data.position - librg_entity_fetch(msg->ctx, callerID)->position);
+			// A5 guarded `caller`/`msg->peer`, but the Entity wrapper can outlive the
+				// live librg entity (removed mid-flight under lag/desync churn), so this
+				// fetch still returns null. Dereferencing it crashed the server -> every
+				// client dropped. Drop the sync instead.
+				librg_entity* callerEntity = librg_entity_fetch(msg->ctx, callerID);
+				if (!callerEntity)
+				{
+					return;
+				}
+				float minDist = zpl_vec3_mag2(data.position - callerEntity->position);
 
 			librg_entity_iteratex(msg->ctx, LIBRG_ENTITY_ALIVE | LIBRG_ENTITY_CLIENT, id,
 				{
@@ -230,6 +239,12 @@ namespace f4mp
 					}
 
 					librg_entity* entity = librg_entity_fetch(msg->ctx, id);
+					// Same guard: a listed id whose entity vanished between the
+					// iterate snapshot and the fetch would null-deref here.
+					if (!entity)
+					{
+						continue;
+					}
 					if (zpl_vec3_mag2(data.position - entity->position) < minDist)
 					{
 						return;

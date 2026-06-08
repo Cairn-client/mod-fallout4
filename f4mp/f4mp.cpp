@@ -36,6 +36,14 @@ std::recursive_mutex f4mp::F4MP::networkMutex;
 
 f4mp::F4MP& f4mp::F4MP::GetInstance()
 {
+	// A3 hardening: this lazily mutates the `instances` vector and indexes it by
+	// `activeInstance`, both shared between the main-thread network functor and the
+	// Papyrus-VM-thread natives. Every current caller already holds networkMutex, so
+	// take it here too (recursive => free when already held) rather than rely on that
+	// staying true — makes the "instances is only touched under the lock" invariant
+	// self-enforcing instead of an implicit contract a future caller could break.
+	NetLock lock(networkMutex);
+
 	if (instances.size() == 0)
 	{
 		instances.push_back(std::make_unique<F4MP>());

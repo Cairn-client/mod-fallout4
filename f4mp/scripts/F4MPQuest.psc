@@ -9,9 +9,13 @@ int steamPollTimerID = 40   ; steam-net Phase 0 spike: repeatedly pumps F4MP.Ste
 ; StartTimer(0), which on the Papyrus VM means "fire as fast as the script budget
 ; allows" — three uncapped loops that flooded the link and caused the horrendous
 ; lag/desync seen at the first 2-client runtime. Cap them at sane rates instead.
-; (Phase 2 / TODO A3 will move the network pump off the Papyrus VM entirely so it
-; no longer starves during loading screens; until then these caps are the fix.)
-float tickInterval = 0.033      ; ~30 Hz network pump + world sync (keeps movement smooth)
+;
+; Phase 2 / TODO A3 (DONE): the actual network pump (librg_tick) + world sync
+; (SyncWorld) now run inside the C++ F4SE main-thread delay functor, which keeps
+; ticking while the Papyrus VM is paused during loading screens / menus (the VM
+; pause was what made the link go half-open). F4MP.Tick() is now only the deferred
+; topic-info drain, so tickTimer is no longer latency-critical for the network.
+float tickInterval = 0.033      ; topic-info drain (network pump itself is now C++-driven)
 float updateInterval = 0.1      ; ~10 Hz local-player health push (cheap; needn't be fast)
 float npcSyncInterval = 0.25    ; ~4 Hz shared-NPC health cell scan (expensive; keep low)
 

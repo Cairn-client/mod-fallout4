@@ -32,6 +32,7 @@ static void Papyrus_SteamPoll(StaticFunctionTag*) { f4mp::SteamSpike::Get().Poll
 
 std::vector<std::unique_ptr<f4mp::F4MP>> f4mp::F4MP::instances;
 size_t f4mp::F4MP::activeInstance = 0, f4mp::F4MP::nextActiveInstance = 0;
+std::recursive_mutex f4mp::F4MP::networkMutex;
 
 f4mp::F4MP& f4mp::F4MP::GetInstance()
 {
@@ -289,6 +290,7 @@ bool f4mp::F4MP::Init(const F4SEInterface* f4se)
 					}(speaker->baseForm, speaker->extraDataList);
 					printf("topic info: %X / speaker: %X(%s)\n", topicInfo->formID, speaker->formID, name.c_str());
 
+					NetLock lock(networkMutex);
 					F4MP& self = GetInstance();
 
 					SpeakData data{ self.player->GetEntityID(), self.player->GetRefFormID() == speaker->formID ? 0x0 : speaker->formID, topicInfo->formID };
@@ -490,12 +492,66 @@ bool f4mp::F4MP::Init(const F4SEInterface* f4se)
 						}
 					}
 
-					F4MP& f4mp = F4MP::GetInstance();
+					// A3: this F4SE delay functor runs on the main game thread every
+					// ~1ms and KEEPS RUNNING while the Papyrus VM is paused (loading
+					// screens, pause menu, dialogue). The network pump (librg_tick)
+					// and world sync (SyncWorld) used to ride the Papyrus tick timer,
+					// so they starved during those pauses → half-open links → the
+					// lag/desync/crash seen at the first 2-client runtime. Drive them
+					// here instead, throttled, with all ctx access under networkMutex
+					// (Papyrus natives take the same lock from their VM thread).
+					{
+						NetLock lock(F4MP::networkMutex);
 
-					librg_entity_iterate(&f4mp.ctx, LIBRG_ENTITY_ALIVE, [](librg_ctx* ctx, librg_entity* entity)
+						F4MP& f4mp = F4MP::GetInstance();
+
+						// Remote-entity animation, every tick (unchanged behavior, now
+						// race-safe vs Papyrus-thread entity-var writes).
+						librg_entity_iterate(&f4mp.ctx, LIBRG_ENTITY_ALIVE, [](librg_ctx* ctx, librg_entity* entity)
+							{
+								Entity::Get(entity)->OnTick();
+							});
+
+						// Independent throttles (these are touched only by this thread).
+						static double lastSync = 0.0, lastTick = 0.0;
+						double now = zpl_time_now();
+
+						// ~10 Hz full-cell world scan + entity/building sync (expensive).
+						// Done before the pump so its queued messages flush this tick.
+						if (now - lastSync >= 0.1)
 						{
-							Entity::Get(entity)->OnTick();
-						});
+							lastSync = now;
+							F4MP::SyncWorld(nullptr); // no-ops internally if disconnected
+						}
+
+						// ~30 Hz network pump (matches the validated Phase-1 cap; faster
+						// would flood). Drives every split-client instance, then advances
+						// the active instance + grows the pool (moved out of F4MP::Tick so
+						// the instances vector is only ever mutated under this lock).
+						if (now - lastTick >= 0.033)
+						{
+							lastTick = now;
+
+							for (auto& instance : F4MP::instances)
+							{
+								librg_tick(&instance->ctx);
+							}
+
+							F4MP::activeInstance = F4MP::nextActiveInstance;
+
+							while (F4MP::instances.size() <= F4MP::activeInstance)
+							{
+								F4MP::instances.push_back(std::make_unique<F4MP>());
+								F4MP::instances.back()->player = std::make_unique<Player>();
+
+								F4MP& mainInstance = *F4MP::instances.front();
+								F4MP& newInstance = *F4MP::instances.back();
+								newInstance.messaging = mainInstance.messaging;
+								newInstance.papyrus = mainInstance.papyrus;
+								newInstance.task = mainInstance.task;
+							}
+						}
+					}
 
 					return true;
 				}
@@ -524,6 +580,7 @@ bool f4mp::F4MP::Init(const F4SEInterface* f4se)
 
 librg_entity* f4mp::F4MP::FetchEntity(UInt32 id, const std::string& errorMsg)
 {
+	NetLock lock(networkMutex);
 	librg_entity* entity = librg_entity_fetch(&ctx, id);
 	if (!entity)
 	{
@@ -1018,16 +1075,19 @@ UInt32 f4mp::F4MP::GetClientInstanceID(StaticFunctionTag* base)
 
 void f4mp::F4MP::SetClient(StaticFunctionTag* base, UInt32 instance)
 {
+	NetLock lock(networkMutex);
 	nextActiveInstance = instance;
 }
 
 bool f4mp::F4MP::IsConnected(StaticFunctionTag* base)
 {
+	NetLock lock(networkMutex);
 	return !!librg_is_connected(&GetInstance().ctx);
 }
 
 bool f4mp::F4MP::Connect(StaticFunctionTag* base, Actor* player, TESNPC* playerActorBase, BSFixedString address, SInt32 port)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 	librg_network_stop(&self.ctx);
 
@@ -1124,6 +1184,7 @@ bool f4mp::F4MP::Connect(StaticFunctionTag* base, Actor* player, TESNPC* playerA
 
 bool f4mp::F4MP::Disconnect(StaticFunctionTag* base)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 	librg_network_stop(&self.ctx);
 
@@ -1133,8 +1194,14 @@ bool f4mp::F4MP::Disconnect(StaticFunctionTag* base)
 
 void f4mp::F4MP::Tick(StaticFunctionTag* base)
 {
+	// A3: the network pump (librg_tick), world sync (SyncWorld) and split-client
+	// instance advancement moved to the F4SE main-thread delay functor (see
+	// PostLoadGame in Init) so they keep running while the Papyrus VM is paused
+	// during loading screens / menus. This native now only drains the deferred
+	// topic-info registrations, which must stay Papyrus-side (it raises Papyrus
+	// external events). Still safe to keep on the Papyrus tick timer.
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
-	//librg_tick(&self.ctx);
 
 	std::vector<TESForm*> newTopicInfos;
 
@@ -1164,34 +1231,11 @@ void f4mp::F4MP::Tick(StaticFunctionTag* base)
 			});
 	}
 
-	for (auto& instance : instances)
-	{
-		// this part is essential
-		if (librg_is_connected(&instance->ctx))
-		{
-			SyncWorld(base);
-		}
-
-		librg_tick(&instance->ctx);
-	}
-
-	activeInstance = nextActiveInstance;
-
-	while (instances.size() <= activeInstance)
-	{
-		instances.push_back(std::make_unique<F4MP>());
-		instances.back()->player = std::make_unique<Player>();
-
-		F4MP& mainInstance = *instances.front();
-		F4MP& newInstance = *instances.back();
-		newInstance.messaging = mainInstance.messaging;
-		newInstance.papyrus = mainInstance.papyrus;
-		newInstance.task = mainInstance.task;
-	}
 }
 
 void f4mp::F4MP::SyncWorld(StaticFunctionTag* base)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 	if (!librg_is_connected(&self.ctx))
 	{
@@ -1344,12 +1388,14 @@ void f4mp::F4MP::SyncWorld(StaticFunctionTag* base)
 
 UInt32 f4mp::F4MP::GetPlayerEntityID(StaticFunctionTag* base)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 	return self.player->GetEntityID();
 }
 
 UInt32 f4mp::F4MP::GetEntityID(StaticFunctionTag* base, TESObjectREFR* ref)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 
 	auto entityID = self.entityIDs.find(ref->formID);
@@ -1363,6 +1409,7 @@ UInt32 f4mp::F4MP::GetEntityID(StaticFunctionTag* base, TESObjectREFR* ref)
 
 void f4mp::F4MP::SetEntityRef(StaticFunctionTag* base, UInt32 entityID, TESObjectREFR* ref)
 {
+	NetLock lock(networkMutex);
 	Entity* entity = Entity::Get(GetInstance().FetchEntity(entityID));
 	if (!entity)
 	{
@@ -1374,12 +1421,14 @@ void f4mp::F4MP::SetEntityRef(StaticFunctionTag* base, UInt32 entityID, TESObjec
 
 bool f4mp::F4MP::IsEntityValid(StaticFunctionTag* base, UInt32 entityID)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 	return !!librg_entity_valid(&self.ctx, entityID);
 }
 
 bool f4mp::F4MP::IsEntityMine(StaticFunctionTag* base, UInt32 entityID)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 
 	// Our own player is always "ours".
@@ -1397,6 +1446,7 @@ bool f4mp::F4MP::IsEntityMine(StaticFunctionTag* base, UInt32 entityID)
 
 VMArray<Float32> f4mp::F4MP::GetEntityPosition(StaticFunctionTag* base, UInt32 entityID)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 	std::vector<Float32> result{ -1, -1, -1 };
 
@@ -1412,6 +1462,7 @@ VMArray<Float32> f4mp::F4MP::GetEntityPosition(StaticFunctionTag* base, UInt32 e
 
 void f4mp::F4MP::SetEntityPosition(StaticFunctionTag* base, UInt32 entityID, float x, float y, float z)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 
 	librg_entity* entity = self.FetchEntity(entityID);
@@ -1447,6 +1498,7 @@ void f4mp::F4MP::SetEntityPosition(StaticFunctionTag* base, UInt32 entityID, flo
 
 void f4mp::F4MP::SetEntVarNum(StaticFunctionTag* base, UInt32 entityID, BSFixedString name, Float32 value)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 
 	// Numbers live on Entity, not just Player, so this works for shared NPCs
@@ -1462,6 +1514,7 @@ void f4mp::F4MP::SetEntVarNum(StaticFunctionTag* base, UInt32 entityID, BSFixedS
 
 void f4mp::F4MP::SetEntVarAnim(StaticFunctionTag* base, UInt32 entityID, BSFixedString animState)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 
 	Player* player = Entity::GetAs<Player>(self.FetchEntity(entityID));
@@ -1475,6 +1528,7 @@ void f4mp::F4MP::SetEntVarAnim(StaticFunctionTag* base, UInt32 entityID, BSFixed
 
 Float32 f4mp::F4MP::GetEntVarNum(StaticFunctionTag* base, UInt32 entityID, BSFixedString name)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 
 	// See SetEntVarNum: Numbers are an Entity-level concept, shared NPCs included.
@@ -1489,6 +1543,7 @@ Float32 f4mp::F4MP::GetEntVarNum(StaticFunctionTag* base, UInt32 entityID, BSFix
 
 BSFixedString f4mp::F4MP::GetEntVarAnim(StaticFunctionTag* base, UInt32 entityID)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 
 	Player* player = Entity::GetAs<Player>(self.FetchEntity(entityID));
@@ -1589,6 +1644,7 @@ void f4mp::F4MP::CopyWornItems(StaticFunctionTag* base, Actor* src, Actor* dest)
 
 void f4mp::F4MP::PlayerHit(StaticFunctionTag* base, UInt32 hitter, UInt32 hittee, Float32 damage)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 
 	HitData data{ hitter, hittee, damage };
@@ -1598,6 +1654,7 @@ void f4mp::F4MP::PlayerHit(StaticFunctionTag* base, UInt32 hitter, UInt32 hittee
 
 void f4mp::F4MP::PlayerFireWeapon(StaticFunctionTag* base)
 {
+	NetLock lock(networkMutex);
 	F4MP& self = GetInstance();
 
 	UInt32 playerEntityID = self.player->GetEntityID();

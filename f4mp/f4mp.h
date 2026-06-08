@@ -10,11 +10,20 @@
 #include <functional>
 #include <algorithm>
 #include <atomic>
+#include <mutex>
 
 // TODO: completely separate static functions and member variable access with instance function copies of them.
 
 namespace f4mp
 {
+	// A3: every access to the librg ctx / instance pool is serialized through one
+	// recursive mutex (F4MP::networkMutex). The F4SE main-thread delay functor now
+	// drives librg_tick + SyncWorld, while Papyrus natives run on VM worker threads
+	// and still touch the same state — so both sides take this lock. Recursive
+	// because the functor locks once around librg_tick, whose receive handlers
+	// re-enter through FetchEntity (which also locks).
+	using NetLock = std::lock_guard<std::recursive_mutex>;
+
 	struct SyncDataForPapyrus
 	{
 		TESObjectREFR* ref;
@@ -69,6 +78,10 @@ namespace f4mp
 	private:
 		static std::vector<std::unique_ptr<F4MP>> instances;
 		static size_t activeInstance, nextActiveInstance;
+
+		// A3: serializes all ctx/instance access between the main-thread network
+		// functor and the Papyrus-VM-thread natives. See NetLock above.
+		static std::recursive_mutex networkMutex;
 
 		Config config;
 

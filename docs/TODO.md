@@ -29,7 +29,7 @@ forever. Every other client keeps seeing a frozen ghost, and entity slots leak o
   and re-send appearance/worn-items on reconnect (`OnConnectRefuse` still only logs). Pairs with
   A3/A1 and needs a 1.10.163 runtime to validate (timing, re-handshake, no duplicate clones).
 
-### 🔴 A3. Client tick is driven by a Papyrus 0-second timer → starves during loading/menus
+### 🟢 A3. Client tick is driven by a Papyrus 0-second timer → starves during loading/menus — CODE LANDED (2026-06-07), runtime-test owed
 `F4MPQuest.psc:196` `OnTimer` → `F4MP.Tick()` → re-`StartTimer(0, tickTimerID)`. `F4MP::Tick`
 (`f4mp.cpp:1013`) is what calls `librg_tick`. The Papyrus VM is **paused** during loading
 screens, the pause menu, and dialogue, so `librg_tick` stops → no packets in/out → the link
@@ -55,6 +55,29 @@ animation via `librg_entity_iterate(... OnTick())`). Use it as the single networ
 - **Why not landed yet:** this changes the network threading model; a wrong move crashes on
   connect, and it can't be validated without FO4 1.10.163 + two clients. Implement + test
   together once a runtime exists; then A1 (re-enable server timeout) becomes safe.
+
+**✅ IMPLEMENTED 2026-06-07 (code, build-verified Debug x64; NOT YET runtime-tested):**
+- The F4SE main-thread delay functor (`f4mp.cpp` PostLoadGame `OnTick::Run`) now drives the
+  network: it runs `SyncWorld` throttled to ~10 Hz, then `librg_tick` over every split-client
+  instance throttled to ~30 Hz (the validated Phase-1 cap), then advances `activeInstance` +
+  grows the instance pool. Independent throttles via function-local `static double` (shared
+  across functor instances, so even a duplicate PostLoadGame functor can't double-tick).
+- `F4MP::Tick` (Papyrus native) is gutted of the network loop + instance advancement; it now
+  only drains deferred topic-info registrations (kept Papyrus-side because it raises Papyrus
+  external events). `F4MPQuest.psc` tickTimer therefore no longer governs the pump (comments
+  updated; `.pex` unchanged — comment-only edit).
+- **Chose the single-mutex guard, not the queue.** Added `static std::recursive_mutex
+  F4MP::networkMutex` + `using NetLock`. Every ctx/instance/entity-data access is serialized:
+  the functor's whole network block, and the natives `Connect`/`Disconnect`/`SetClient`/
+  `IsConnected`/`Tick`/`SyncWorld`/`FetchEntity`/`PlayerHit`/`PlayerFireWeapon`/`Set|GetEntVar*`/
+  `Set|GetEntityPosition`/`IsEntityValid`/`IsEntityMine`/`Get(Player)EntityID`/`SetEntityRef` +
+  the `TopicInfoBegin` Speak send. Recursive because the functor locks once around `librg_tick`,
+  whose receive handlers re-enter via `FetchEntity`. No second lock exists → no deadlock; the
+  receive handlers now also run on the main thread (safer for game-object access).
+- **Runtime test still owed (2 × FO4 1.10.163 clients):** confirm connect doesn't crash, that
+  the link survives a loading screen / pause menu (the whole point), and that movement/health/
+  building sync still flow. Only after this passes is **A1** (re-enable server peer timeout)
+  safe to land.
 
 ### ✅ A4. `Connect()` starts timers before knowing if the connection succeeded — DONE (2026-06-01)
 `F4MPQuest.Connect` now captures `F4MP.Connect`'s result and only `StartTimer`s the

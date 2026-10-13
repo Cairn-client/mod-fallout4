@@ -66,3 +66,10 @@ thirdparty/steamworks/*
 
 # Release packaging output (built artifacts; published as GitHub release assets, not committed).
 dist/
+
+# Cairn pack build output
+/release/
+/dl/
+/notes.md
+/.github/cairn/Fo4Bridge/bin/
+/.github/cairn/Fo4Bridge/obj/

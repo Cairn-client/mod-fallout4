@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "id": "fallout4",
+  "name": "Fallout 4",
+  "developer": "Bethesda Game Studios",
+  "franchise": "Fallout",
+  "steamAppId": 377160,
+  "exe": "Fallout4.exe",
+  "description": "Wander the Commonwealth together. F4MP adds multiplayer to Fallout 4 through the Fallout 4 Script Extender: every player appears in the others' world, and in this fork they fight the same enemies. Experimental: expect bugs, and back up your saves.",
+  "accent": "#F1B72C",
+  "images": {
+    "background": "fallout4.jpg",
+    "logo": "fallout4-logo.png",
+    "hero": "fallout4-hero.jpg",
+    "poster": "fallout4-poster.jpg",
+    "screenshots": [ "fallout4-shot-1.jpg", "fallout4-shot-2.jpg" ]
+  },
+  "ownSession": true,
+  "setup": [
+    { "kind": "steam-running" },
+    { "kind": "steam-app", "appId": 377160, "title": "Fallout 4", "detail": "Install Fallout 4 from your Steam library." },
+    { "kind": "game-found" },
+    { "kind": "mod-installed", "detail": "Download the mod above: Cairn puts it in the game's Data folder. Cairn then installs F4SE, switches the mod's plugin on and enables loose files by itself (see the setup list). Fallout 4 must be on version 1.10.163." }
+  ],
+  "hostSteps": [
+    "Put Fallout 4 on version 1.10.163, the classic build from before the Next-Gen update (the setup list tells you if it is not). Then download the mod above and let Cairn finish the setup list.",
+    "Press Play: Cairn starts the game through F4SE. Load a save.",
+    "In the game press F5 to host a Steam co-op lobby, or F1 to play by direct IP against a running F4MP server (the server is in the mod's folder in Cairn).",
+    "Your Steam friends who have the same mod version join with F6."
+  ],
+  "joinSteps": [
+    "Put Fallout 4 on version 1.10.163, download the mod above (the same version as the host's) and let Cairn finish the setup list.",
+    "Press Play and load a save of your own.",
+    "In the game press F6 to join the Steam co-op lobby of your friend, or F1 to join a server by IP.",
+    "Everyone keeps their own save: the mod shows each player in the others' world and shares the fights."
+  ],
+  "features": [
+    { "title": "Sessions", "items": [
+      { "name": "Steam co-op", "detail": "One player hosts a lobby (F5), friends join it (F6). Everyone needs the same game version, F4SE and mod version.", "status": "inTest" },
+      { "name": "Direct IP", "detail": "Join a running F4MP server by address (F1).", "status": "inTest" },
+      { "name": "Set up by Cairn", "detail": "Cairn checks the game version, installs F4SE (checked against a pinned file), switches the plugin on and enables loose files, and keeps the mod up to date.", "status": "ready" }
+    ] },
+    { "title": "Co-op", "items": [
+      { "name": "Players in each other's world", "detail": "Each player's appearance, position and animations are shown to the others.", "status": "inTest" },
+      { "name": "Shared combat", "detail": "Enemies take damage and die for every player: a hit on an enemy another player owns is routed to them.", "status": "inTest" },
+      { "name": "Shared progression", "detail": "Quests, loot and settlements are still each player's own.", "status": "planned" }
+    ] }
+  ]
+}

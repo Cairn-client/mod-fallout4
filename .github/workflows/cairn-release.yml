@@ -1,0 +1,79 @@
+name: Cairn release
+
+# A Cairn release is a bare X.Y.Z tag on master. The pack carries the upstream F4MP release (pinned by its SHA-256 in UPSTREAM.md, because this
+# project's plugin needs the F4SE sources and the Steamworks SDK to build, which a runner cannot fetch), and the launcher's own setup program
+# for Fallout 4, built here from .github/cairn/Fo4Bridge. The pack, pack-index.json and game.json are published: the Cairn launcher reads the index
+# to install and update this mod. RELEASE_CHANNEL=beta publishes a pre-release (only players who chose beta are offered it).
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-bridge:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the setup program
+        run: dotnet publish .github/cairn/Fo4Bridge -c Release -r win-x64 -o bridge-out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fo4-bridge
+          path: bridge-out/fo4-bridge.exe
+          if-no-files-found: error
+
+  pack:
+    needs: build-bridge
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: The tag must be on master and equal VERSION
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          git fetch origin master
+          git merge-base --is-ancestor $env:GITHUB_SHA origin/master
+          if ($LASTEXITCODE -ne 0) { throw "tag $env:GITHUB_REF_NAME is not on master" }
+          $v = (Get-Content VERSION -TotalCount 1).Trim()
+          if ($v -ne $env:GITHUB_REF_NAME) { throw "tag $env:GITHUB_REF_NAME is not VERSION ($v)" }
+
+      - uses: actions/download-artifact@v4
+        with: { name: fo4-bridge, path: dl }
+
+      - name: Get the upstream F4MP release (checked against its pinned hash by the pack script)
+        shell: pwsh
+        run: |
+          $url = ((Get-Content UPSTREAM.md) | Where-Object { $_ -match '^upstream-url:\s*(\S+)' } | ForEach-Object { $Matches[1] } | Select-Object -First 1)
+          Invoke-WebRequest -Uri $url -OutFile dl/F4MP-upstream.zip -UseBasicParsing
+
+      - name: Build the pack
+        shell: pwsh
+        run: ./.github/cairn/Build-Pack.ps1 -Upstream dl/F4MP-upstream.zip -Bridge dl/fo4-bridge.exe
+
+      - name: Changelog
+        shell: pwsh
+        run: ./.github/cairn/New-ReleaseNotes.ps1 -OutFile notes.md -Tag $env:GITHUB_REF_NAME
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cairn-pack
+          path: |
+            release/Cairn-Pack-fallout4-*.zip
+            release/pack-index.json
+            .github/cairn/game/game.json
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $assets = @("release/Cairn-Pack-fallout4-$env:GITHUB_REF_NAME.zip", 'release/pack-index.json') + (Get-ChildItem .github/cairn/game -File | ForEach-Object { $_.FullName })
+          $flags = @()
+          if ((Get-Content RELEASE_CHANNEL -Raw).Trim() -eq 'beta') { $flags += '--prerelease' }
+          gh release create $env:GITHUB_REF_NAME @assets --title $env:GITHUB_REF_NAME --notes-file notes.md --verify-tag @flags
